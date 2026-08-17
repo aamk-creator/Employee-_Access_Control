@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+    <t t-name="employee_access_control.ApplicationRoleDropdowns">
+        <div class="eac_application_roles">
+            <div class="eac_application_roles__loading" t-if="roleState.loading">
+                Loading access options...
+            </div>
+            <div
+                class="eac_application_role_row"
+                t-foreach="lines"
+                t-as="line"
+                t-key="line.id"
+            >
+                <label class="eac_application_role_row__label">
+                    <t t-esc="applicationName(line)"/>
+                </label>
+                <select
+                    class="form-select eac_application_role_row__select"
+                    t-att-value="selectedRoleId(line)"
+                    t-att-disabled="props.readonly"
+                    t-on-change="(event) => this.onRoleChange(line, event)"
+                >
+                    <option value="">Select access...</option>
+                    <option
+                        t-foreach="roleOptions(line)"
+                        t-as="role"
+                        t-key="role.id"
+                        t-att-value="role.id"
+                        t-att-selected="role.id === selectedRoleId(line)"
+                    >
+                        <t t-esc="role.name"/>
+                    </option>
+                </select>
+            </div>
+        </div>
+    </t>
+</templates>

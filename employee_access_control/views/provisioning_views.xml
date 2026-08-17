@@ -1,0 +1,133 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_employee_access_profile_tree" model="ir.ui.view">
+        <field name="name">employee.access.profile.tree</field>
+        <field name="model">employee.access.profile</field>
+        <field name="arch" type="xml">
+            <list string="Access Profiles">
+                <field name="employee_name"/>
+                <field name="employee_email"/>
+                <field name="company_id"/>
+                <field name="system_id"/>
+                <field name="state" widget="badge" decoration-success="state == 'active'" decoration-warning="state == 'pending'" decoration-danger="state == 'revoked'"/>
+                <field name="last_provisioned_on" optional="show"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_employee_access_profile_form" model="ir.ui.view">
+        <field name="name">employee.access.profile.form</field>
+        <field name="model">employee.access.profile</field>
+        <field name="arch" type="xml">
+            <form string="Access Profile">
+                <header>
+                    <field name="state" widget="statusbar" statusbar_visible="pending,active,revoked"/>
+                </header>
+                <sheet>
+                    <group>
+                        <group string="Employee Details">
+                            <field name="employee_name"/>
+                            <field name="fingerprint_id"/>
+                            <field name="employee_email"/>
+                            <field name="department"/>
+                            <field name="position"/>
+                            <field name="company_id"/>
+                        </group>
+                        <group string="Granted Access">
+                            <field name="system_id"/>
+                            <field name="access_facility_ids" widget="many2many_tags" options="{'no_create': True, 'no_create_edit': True}"/>
+                            <field name="access_company_ids" widget="many2many_tags" options="{'no_create': True, 'no_create_edit': True}"/>
+                            <field name="application_ids" widget="many2many_tags" options="{'no_create': True, 'no_create_edit': True}"/>
+                            <field name="required_privileged_access"/>
+                            <field name="last_request_id" readonly="1"/>
+                            <field name="last_provisioned_by_id" readonly="1"/>
+                            <field name="last_provisioned_on" readonly="1"/>
+                        </group>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_employee_access_profile" model="ir.actions.act_window">
+        <field name="name">Access Profiles</field>
+        <field name="res_model">employee.access.profile</field>
+        <field name="view_mode">list,form</field>
+        <field name="view_id" ref="employee_access_control.view_employee_access_profile_tree"/>
+        <field name="context">{}</field>
+    </record>
+
+    <record id="view_employee_access_provision_task_tree" model="ir.ui.view">
+        <field name="name">employee.access.provision.task.tree</field>
+        <field name="model">employee.access.provision.task</field>
+        <field name="arch" type="xml">
+            <list string="Vendor Tickets">
+                <field name="ticket_reference"/>
+                <field name="request_id"/>
+                <field name="vendor_email"/>
+                <field name="system_id"/>
+                <field name="state" widget="badge" decoration-info="state == 'in_progress'" decoration-warning="state == 'pending'" decoration-success="state == 'done'" decoration-danger="state == 'failed'"/>
+                <field name="last_sent_on" optional="show"/>
+                <field name="resend_count" optional="hide"/>
+                <field name="completed_on" optional="show"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_employee_access_provision_task_form" model="ir.ui.view">
+        <field name="name">employee.access.provision.task.form</field>
+        <field name="model">employee.access.provision.task</field>
+        <field name="arch" type="xml">
+            <form string="Vendor Ticket">
+                <header>
+                    <button name="action_start" type="object" string="Send to Vendor" class="btn-primary" invisible="state != 'pending'"/>
+                    <button name="action_resend_notification" type="object" string="Resend Vendor Email" invisible="state != 'in_progress'"/>
+                    <button name="action_mark_done" type="object" string="Mark Done" class="btn-primary" invisible="state != 'in_progress'"/>
+                    <button name="action_mark_user_inactive" type="object" string="Mark User Inactive" invisible="state != 'done' or request_access_status != 'active'"/>
+                    <button name="action_reactivate_user" type="object" string="Reactivate User" class="btn-primary" invisible="state != 'done' or request_access_status != 'inactive'"/>
+                    <button name="action_mark_failed" type="object" string="Mark Failed" invisible="state not in ['pending', 'in_progress']"/>
+                    <button name="action_cancel" type="object" string="Cancel" invisible="state in ['done', 'cancelled']"/>
+                    <field name="state" widget="statusbar" statusbar_visible="pending,in_progress,done,failed,cancelled"/>
+                    <field name="request_access_status" invisible="True"/>
+                </header>
+                <sheet>
+                    <div class="oe_button_box" name="button_box">
+                        <button name="action_open_request" type="object" class="oe_stat_button" icon="fa-external-link">
+                            <div class="o_stat_info"><span class="o_stat_text">Open Request</span></div>
+                        </button>
+                    </div>
+                    <div class="oe_title"><h1><field name="ticket_reference" readonly="1"/></h1></div>
+                    <group>
+                        <group>
+                            <field name="request_id" readonly="1"/>
+                            <field name="profile_id" readonly="1"/>
+                        </group>
+                        <group>
+                            <field name="company_id" readonly="1"/>
+                            <field name="system_id" readonly="1"/>
+                            <field name="vendor_email" readonly="1"/>
+                            <field name="vendor_subject" readonly="1"/>
+                            <field name="vendor_portal_url" widget="url" readonly="1"/>
+                            <field name="external_ticket_reference" readonly="state == 'done'" placeholder="Vendor helpdesk ticket number"/>
+                            <field name="first_sent_on" readonly="1"/>
+                            <field name="last_sent_on" readonly="1"/>
+                            <field name="resend_count" readonly="1"/>
+                            <field name="started_on" readonly="1"/>
+                            <field name="completed_on" readonly="1"/>
+                            <field name="completed_by_id" readonly="1"/>
+                        </group>
+                    </group>
+                </sheet>
+                <chatter/>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_employee_access_provision_task" model="ir.actions.act_window">
+        <field name="name">Vendor Tickets</field>
+        <field name="res_model">employee.access.provision.task</field>
+        <field name="view_mode">list,form</field>
+        <field name="view_id" ref="employee_access_control.view_employee_access_provision_task_tree"/>
+        <field name="context">{}</field>
+    </record>
+</odoo>

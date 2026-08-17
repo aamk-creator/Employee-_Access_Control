@@ -1,0 +1,40 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Odoo runtime data
+.odoo-data/
+*.log
+odoo-19.0.post20260812/
+
+# Local configuration and secrets
+*.local
+.env
+.env.*
+odoo.conf
+
+# Editor / OS files
+.vscode/
+.idea/
+*.swp
+Thumbs.db
+Desktop.ini
+
+# Build / packaging
+build/
+dist/
+*.egg-info/
+
+# Large local artifacts
+*.zip
+tmp_*.html

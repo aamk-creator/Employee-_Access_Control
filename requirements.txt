@@ -1,0 +1,5 @@
+# Root dependency entrypoint for this repository.
+# Install with:
+#   pip install -r requirements.txt
+
+-r odoo-19.0.post20260812/requirements.txt

@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <function model="employee.access.application" name="_exclude_internal_employee_access_modules"/>
+</odoo>

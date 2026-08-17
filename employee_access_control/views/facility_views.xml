@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_employee_access_facility_search" model="ir.ui.view">
+        <field name="name">employee.access.facility.search</field>
+        <field name="model">employee.access.facility</field>
+        <field name="arch" type="xml">
+            <search string="Facilities">
+                <field name="name"/>
+                <field name="code"/>
+                <field name="company_id"/>
+                <filter name="filter_active" string="Active" domain="[('active', '=', True)]"/>
+                <filter name="filter_archived" string="Archived" domain="[('active', '=', False)]"/>
+                <group>
+                    <filter name="group_by_company" string="Company" context="{'group_by': 'company_id'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <record id="view_employee_access_facility_tree" model="ir.ui.view">
+        <field name="name">employee.access.facility.tree</field>
+        <field name="model">employee.access.facility</field>
+        <field name="arch" type="xml">
+            <list string="Facilities" default_order="sequence, name" import="0" export_xlsx="0">
+                <field name="name"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_employee_access_facility_form" model="ir.ui.view">
+        <field name="name">employee.access.facility.form</field>
+        <field name="model">employee.access.facility</field>
+        <field name="arch" type="xml">
+            <form string="Facility">
+                <sheet>
+                    <group>
+                        <group>
+                            <field name="name"/>
+                            <field name="code"/>
+                            <field name="company_id" groups="base.group_multi_company"/>
+                        </group>
+                        <group>
+                            <field name="sequence"/>
+                            <field name="active"/>
+                        </group>
+                    </group>
+                    <group>
+                        <field name="address"/>
+                    </group>
+                    <group>
+                        <field name="description"/>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_employee_access_facility" model="ir.actions.act_window">
+        <field name="name">Facilities</field>
+        <field name="res_model">employee.access.facility</field>
+        <field name="view_mode">list,form</field>
+        <field name="view_id" ref="employee_access_control.view_employee_access_facility_tree"/>
+        <field name="search_view_id" ref="employee_access_control.view_employee_access_facility_search"/>
+        <field name="context">{}</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">Create a facility for employee access management.</p>
+        </field>
+    </record>
+</odoo>

@@ -1,0 +1,379 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="seq_employee_access_request" model="ir.sequence">
+        <field name="name">Employee Access Request</field>
+        <field name="code">employee.access.request</field>
+        <field name="prefix">REQ%(y)s%(month)s-</field>
+        <field name="padding">4</field>
+        <field name="company_id" eval="False"/>
+    </record>
+
+    <record id="view_employee_access_request_search" model="ir.ui.view">
+        <field name="name">employee.access.request.search</field>
+        <field name="model">employee.access.request</field>
+        <field name="arch" type="xml">
+            <search string="User Account Requests">
+                <field name="employee_display_name"/>
+                <field name="employee_email"/>
+                <field name="department"/>
+                <field name="position"/>
+                <field name="company_id"/>
+                <field name="system_id"/>
+                <field name="application_ids"/>
+                <field name="request_type"/>
+                <filter name="filter_draft" string="To Approve" domain="[('state', '=', 'draft')]"/>
+                <filter name="filter_to_approve" string="Submitted for Approval" domain="[('state', '=', 'to_approve')]"/>
+                <filter name="filter_credential" string="Credential Management Approval" domain="[('state', '=', 'credential_approval')]"/>
+                <filter name="filter_approved" string="Approved" domain="[('state', '=', 'approved')]"/>
+                <filter name="filter_provisioning" string="Provisioning" domain="[('state', '=', 'provisioning')]"/>
+                <filter name="filter_active" string="Active" domain="[('state', '=', 'active')]"/>
+                <filter name="filter_inactive" string="Inactive" domain="[('state', '=', 'inactive')]"/>
+                <filter name="filter_rejected" string="Rejected" domain="[('state', '=', 'rejected')]"/>
+                <group>
+                    <filter name="group_by_company" string="Company" context="{'group_by': 'company_id'}"/>
+                    <filter name="group_by_system" string="System" context="{'group_by': 'system_id'}"/>
+                    <filter name="group_by_state" string="Status" context="{'group_by': 'state'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <record id="view_employee_access_request_tree" model="ir.ui.view">
+        <field name="name">employee.access.request.tree</field>
+        <field name="model">employee.access.request</field>
+        <field name="arch" type="xml">
+            <list string="Odoo User Account Requests">
+                <field name="reference" string="Name"/>
+                <field name="request_date" string="Date" widget="request_date_ddmmyy"/>
+                <field name="employee_display_name" string="Employee"/>
+                <field name="fingerprint_id"/>
+                <field name="department"/>
+                <field name="position"/>
+                <field name="system_id"/>
+                <field name="list_status_label"
+                       widget="badge"
+                       decoration-success="state == 'active'"
+                       decoration-info="state in ['to_approve', 'credential_approval', 'approved', 'provisioning']"
+                       decoration-warning="state == 'draft'"
+                       decoration-danger="state == 'rejected'"/>
+                <field name="approval_status_label"
+                       widget="badge"
+                       decoration-success="state in ['approved', 'provisioning', 'active']"
+                       decoration-info="state in ['to_approve', 'credential_approval']"
+                       decoration-warning="state == 'draft'"
+                       decoration-danger="state == 'rejected'"/>
+                <field name="state" column_invisible="True"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_employee_access_created_user_request_tree" model="ir.ui.view">
+        <field name="name">employee.access.request.created.user.tree</field>
+        <field name="model">employee.access.request</field>
+        <field name="arch" type="xml">
+            <list string="Created Users" create="0" edit="0" delete="0" import="0">
+                <field name="reference" string="Name"/>
+                <field name="request_date" string="Date" widget="request_date_ddmmyy"/>
+                <field name="employee_display_name" string="Employee"/>
+                <field name="fingerprint_id"/>
+                <field name="department"/>
+                <field name="position"/>
+                <field name="system_id"/>
+                <field name="active_date" widget="request_date_ddmmyy"/>
+                <field name="inactive_date" widget="request_date_ddmmyy"/>
+                <field name="access_status"
+                       string="Status"
+                       widget="badge"
+                       decoration-success="access_status == 'active'"
+                       decoration-muted="access_status == 'inactive'"/>
+                <field name="approval_status_label"
+                       widget="badge"
+                       decoration-success="state in ['approved', 'provisioning', 'active', 'inactive']"/>
+                <field name="state" column_invisible="True"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_employee_access_system_overview_search" model="ir.ui.view">
+        <field name="name">employee.access.request.system.overview.search</field>
+        <field name="model">employee.access.request</field>
+        <field name="arch" type="xml">
+            <search string="System Overview">
+                <field name="employee_display_name"/>
+                <field name="requested_user_id"/>
+                <field name="position"/>
+                <field name="department"/>
+                <field name="company_id"/>
+                <field name="system_id"/>
+                <field name="access_status"/>
+                <filter name="overview_active" string="Active" domain="[('access_status', '=', 'active')]"/>
+                <filter name="overview_inactive" string="Inactive" domain="[('access_status', '=', 'inactive')]"/>
+                <group>
+                    <filter name="overview_group_system" string="System" context="{'group_by': 'system_id'}"/>
+                    <filter name="overview_group_status" string="Status" context="{'group_by': 'access_status'}"/>
+                    <filter name="overview_group_company" string="Company" context="{'group_by': 'company_id'}" groups="base.group_multi_company"/>
+                    <filter name="overview_group_active_date" string="Active Date" context="{'group_by': 'active_date:month'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <record id="view_employee_access_system_overview_list" model="ir.ui.view">
+        <field name="name">employee.access.request.system.overview.list</field>
+        <field name="model">employee.access.request</field>
+        <field name="arch" type="xml">
+            <list string="System Overview" create="0" edit="0" delete="0" import="0">
+                <field name="overview_name" string="Name"/>
+                <field name="employee_display_name" string="Employee"/>
+                <field name="position" string="Job Position"/>
+                <field name="department"/>
+                <field name="system_id"/>
+                <field name="active_date" widget="request_date_ddmmyy"/>
+                <field name="inactive_date" widget="request_date_ddmmyy"/>
+                <field name="access_status"
+                       string="Status"
+                       widget="badge"
+                       decoration-success="access_status == 'active'"
+                       decoration-muted="access_status == 'inactive'"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_employee_access_system_overview_pivot" model="ir.ui.view">
+        <field name="name">employee.access.request.system.overview.pivot</field>
+        <field name="model">employee.access.request</field>
+        <field name="arch" type="xml">
+            <pivot string="System Overview">
+                <field name="system_id" type="row"/>
+                <field name="access_status" type="col"/>
+            </pivot>
+        </field>
+    </record>
+
+    <record id="view_employee_access_system_overview_graph" model="ir.ui.view">
+        <field name="name">employee.access.request.system.overview.graph</field>
+        <field name="model">employee.access.request</field>
+        <field name="arch" type="xml">
+            <graph string="System Overview" type="bar" stacked="1">
+                <field name="system_id"/>
+                <field name="access_status"/>
+            </graph>
+        </field>
+    </record>
+
+    <record id="view_employee_access_request_form" model="ir.ui.view">
+        <field name="name">employee.access.request.form</field>
+        <field name="model">employee.access.request</field>
+        <field name="arch" type="xml">
+            <form string="Odoo User Account Request">
+                <header>
+                    <button name="action_submit" type="object" string="Submit for Approval" class="btn-primary" invisible="state != 'draft'"/>
+                    <button name="action_manager_approve" type="object" string="ERP Admin Approve" class="btn-primary" invisible="state != 'to_approve' or not requires_erp_admin_approval"/>
+                    <button name="action_manager_approve" type="object" string="HRMS Admin Approve" class="btn-primary" invisible="state != 'to_approve' or not requires_hrms_admin_approval"/>
+                    <button name="action_manager_approve" type="object" string="System Admin Approve" class="btn-primary" invisible="state != 'to_approve' or requires_erp_admin_approval or requires_hrms_admin_approval"/>
+                    <button name="action_approve" type="object" string="Credential Management Approve" class="btn-primary" invisible="state != 'credential_approval'"/>
+                    <button name="action_mark_inactive" type="object" string="Mark Inactive" invisible="state != 'active'" groups="employee_access_control.group_employee_access_administrator"/>
+                    <button name="action_reactivate" type="object" string="Reactivate" class="btn-primary" invisible="state != 'inactive'" groups="employee_access_control.group_employee_access_administrator"/>
+                    <button name="action_view_provisioning_tasks" type="object" string="Open Vendor Ticket" class="btn-primary" invisible="state not in ['approved', 'provisioning', 'active']"/>
+                    <button name="action_reject" type="object" string="Reject" invisible="state not in ['to_approve', 'credential_approval']"/>
+                    <button name="action_reset_to_draft" type="object" string="Reset to Draft" invisible="state == 'draft'"/>
+                    <field name="state" widget="statusbar" statusbar_visible="draft,to_approve,credential_approval,approved,provisioning,active,inactive"/>
+                </header>
+                <sheet>
+                    <div class="d-flex justify-content-between align-items-start mb-3">
+                        <div class="oe_title">
+                            <h1>
+                                <field name="reference" readonly="1"/>
+                            </h1>
+                        </div>
+                        <field name="workflow_status_label"
+                               widget="badge"
+                               class="fs-6"
+                               decoration-success="state in ['draft', 'to_approve', 'credential_approval', 'approved', 'active']"
+                               decoration-warning="state == 'provisioning'"
+                               decoration-danger="state == 'rejected'"/>
+                    </div>
+                    <group>
+                        <group>
+                            <field name="employee_source" widget="radio"/>
+                            <field name="requested_user_id"
+                                   string="Odoo User"
+                                   widget="many2one_avatar_user"
+                                   invisible="employee_source != 'odoo_user'"
+                                   required="employee_source == 'odoo_user'"
+                                   options="{'no_create': True, 'no_create_edit': True}"/>
+                            <field name="employee_name"
+                                   string="Manual Employee Name"
+                                   invisible="employee_source != 'manual'"
+                                   required="employee_source == 'manual'"/>
+                            <field name="fingerprint_id"/>
+                            <field name="employee_email"/>
+                            <field name="department"/>
+                            <field name="position"/>
+                            <field name="company_id"/>
+                        </group>
+                        <group>
+                            <field name="request_date" widget="request_date_ddmmyy"/>
+                            <field name="system_id" widget="selection"/>
+                            <field name="has_existing_active_access" invisible="1"/>
+                            <field name="duplicate_create_blocked" invisible="1"/>
+                            <field name="existing_access_message" invisible="1"/>
+                            <field name="request_type"
+                                   widget="radio"
+                                   invisible="duplicate_create_blocked"/>
+                            <label for="request_type" string="Request Type" invisible="not duplicate_create_blocked"/>
+                            <div invisible="not duplicate_create_blocked">
+                                <div class="text-muted mb-2">
+                                    <span class="fa fa-circle-o me-2"/>
+                                    Create
+                                </div>
+                                <div class="text-primary fw-bold">
+                                    <span class="fa fa-dot-circle-o me-2"/>
+                                    Update
+                                </div>
+                            </div>
+                            <div class="text-primary fw-bold"
+                                 invisible="not duplicate_create_blocked">
+                            </div>
+                            <label for="existing_access_message"
+                                   string=" "
+                                   invisible="not existing_access_message"/>
+                            <div class="text-warning"
+                                 invisible="not existing_access_message">
+                                <field name="existing_access_message" nolabel="1" readonly="1"/>
+                            </div>
+                            <field name="access_company_ids"
+                                   widget="many2many_tags"
+                                   options="{'no_create': True, 'no_create_edit': True}"/>
+                            <field name="required_privileged_access"/>
+                        </group>
+                    </group>
+                    <notebook>
+                        <page string="Access Rights" name="access_rights">
+                            <group col="1">
+                                <group string="APPLICATION ACCESS" col="1">
+                                    <field name="application_line_ids"
+                                           nolabel="1"
+                                           widget="application_role_dropdowns">
+                                        <list create="0" delete="0" default_order="sequence, application_id">
+                                            <field name="sequence" column_invisible="True"/>
+                                            <field name="application_id"
+                                                   string="Application"
+                                                   readonly="1"
+                                                   force_save="1"/>
+                                            <field name="access_group_id"
+                                                   string="Access"
+                                                   options="{'no_create': True, 'no_create_edit': True}"/>
+                                            <field name="remove_access"
+                                                   string="Remove"
+                                                   optional="hide"
+                                                   invisible="parent.request_type != 'update'"/>
+                                        </list>
+                                    </field>
+                                </group>
+                            </group>
+                        </page>
+                        <page string="Notes" name="notes">
+                            <group string="Business Justification">
+                                <field name="note" placeholder="Add business reason or request notes here..."/>
+                            </group>
+                        </page>
+                        <page string="Approver(s)" name="approvers">
+                            <group>
+                                <group string="Approval Condition">
+                                    <field name="requires_erp_admin_approval" readonly="1"/>
+                                    <field name="requires_hrms_admin_approval" readonly="1"/>
+                                    <field name="requires_credential_approval" readonly="1"/>
+                                </group>
+                                <group>
+                                    <field name="approval_rule_id"
+                                           readonly="1"
+                                           options="{'no_create': True, 'no_open': True}"/>
+                                </group>
+                            </group>
+                            <group string="Assigned Approvers">
+                                <group>
+                                    <field name="manager_approver_id"
+                                           string="ERP Admin"
+                                           invisible="not requires_erp_admin_approval"
+                                           readonly="state != 'draft'"
+                                           options="{'no_create': True, 'no_create_edit': True}"/>
+                                    <field name="manager_approver_id"
+                                           string="HRMS Admin"
+                                           invisible="not requires_hrms_admin_approval"
+                                           readonly="state != 'draft'"
+                                           options="{'no_create': True, 'no_create_edit': True}"/>
+                                    <field name="manager_approver_id"
+                                           string="System Admin"
+                                           invisible="requires_erp_admin_approval or requires_hrms_admin_approval"
+                                           readonly="state != 'draft'"
+                                           options="{'no_create': True, 'no_create_edit': True}"/>
+                                </group>
+                                <group>
+                                    <field name="credential_approver_id"
+                                           string="Credential Management"
+                                           readonly="state != 'draft'"
+                                           options="{'no_create': True, 'no_create_edit': True}"/>
+                                </group>
+                            </group>
+                            <field name="approval_line_ids" nolabel="1" readonly="1">
+                                <list create="0" edit="0" delete="0" default_order="sequence, id">
+                                    <field name="sequence" column_invisible="True"/>
+                                    <field name="approver_user_id"
+                                           string="Approver"
+                                           widget="many2one_avatar_user"/>
+                                    <field name="state"
+                                           string="Status"
+                                           widget="badge"
+                                           decoration-warning="state in ['waiting', 'to_approve']"
+                                           decoration-success="state == 'approved'"
+                                           decoration-danger="state == 'rejected'"/>
+                                    <field name="role" string="Role"/>
+                                </list>
+                            </field>
+                        </page>
+                    </notebook>
+                    <field name="profile_id" invisible="True"/>
+                    <field name="provisioning_task_count" invisible="True"/>
+                    <field name="provisioning_task_ids" invisible="True"/>
+                    <field name="audit_log_ids" invisible="True"/>
+                    <field name="access_facility_ids" invisible="True"/>
+                    <field name="application_count" invisible="True"/>
+                </sheet>
+                <chatter/>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_employee_access_request" model="ir.actions.act_window">
+        <field name="name">Odoo User Account Requests</field>
+        <field name="res_model">employee.access.request</field>
+        <field name="view_mode">list,form</field>
+        <field name="view_id" ref="employee_access_control.view_employee_access_request_tree"/>
+        <field name="search_view_id" ref="employee_access_control.view_employee_access_request_search"/>
+        <field name="context">{}</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">Create a new user account access request.</p>
+        </field>
+    </record>
+
+    <record id="action_employee_access_created_users" model="ir.actions.act_window">
+        <field name="name">Created Users</field>
+        <field name="res_model">employee.access.request</field>
+        <field name="view_mode">list,form</field>
+        <field name="view_id" ref="employee_access_control.view_employee_access_created_user_request_tree"/>
+        <field name="search_view_id" ref="employee_access_control.view_employee_access_request_search"/>
+        <field name="domain">[('state', 'in', ['active', 'inactive'])]</field>
+        <field name="context">{'create': False, 'edit': False, 'delete': False}</field>
+    </record>
+
+    <record id="action_employee_access_system_overview" model="ir.actions.act_window">
+        <field name="name">System Overview</field>
+        <field name="res_model">employee.access.request</field>
+        <field name="view_mode">list,pivot,graph,form</field>
+        <field name="view_id" ref="employee_access_control.view_employee_access_system_overview_list"/>
+        <field name="search_view_id" ref="employee_access_control.view_employee_access_system_overview_search"/>
+        <field name="domain">[('state', 'in', ['active', 'inactive'])]</field>
+        <field name="context">{'create': False, 'edit': False, 'delete': False}</field>
+    </record>
+</odoo>

@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_employee_access_application_search" model="ir.ui.view">
+        <field name="name">employee.access.application.search</field>
+        <field name="model">employee.access.application</field>
+        <field name="arch" type="xml">
+            <search string="Applications">
+                <field name="name"/>
+                <field name="code"/>
+                <field name="system_id"/>
+                <field name="company_id"/>
+                <filter name="filter_active" string="Active" domain="[('active', '=', True)]"/>
+                <filter name="filter_archived" string="Archived" domain="[('active', '=', False)]"/>
+                <group>
+                    <filter name="group_by_system" string="System" context="{'group_by': 'system_id'}"/>
+                    <filter name="group_by_company" string="Company" context="{'group_by': 'company_id'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <record id="view_employee_access_application_tree" model="ir.ui.view">
+        <field name="name">employee.access.application.tree</field>
+        <field name="model">employee.access.application</field>
+        <field name="arch" type="xml">
+            <list string="Module Applications" default_order="sequence, name" import="0" export_xlsx="0">
+                <field name="display_name" string="Application"/>
+                <field name="system_id"/>
+                <field name="description"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_employee_access_application_form" model="ir.ui.view">
+        <field name="name">employee.access.application.form</field>
+        <field name="model">employee.access.application</field>
+        <field name="arch" type="xml">
+            <form string="Module Applications">
+                <sheet>
+                    <group>
+                        <group>
+                            <field name="name" string="Application Name"/>
+                            <field name="system_id" widget="selection"/>
+                        </group>
+                    </group>
+                    <group>
+                        <field name="description"/>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_employee_access_application" model="ir.actions.act_window">
+        <field name="name">Module Applications</field>
+        <field name="res_model">employee.access.application</field>
+        <field name="view_mode">list,form</field>
+        <field name="view_id" ref="employee_access_control.view_employee_access_application_tree"/>
+        <field name="search_view_id" ref="employee_access_control.view_employee_access_application_search"/>
+        <field name="context">{}</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">Create an application that belongs to a managed system.</p>
+        </field>
+    </record>
+</odoo>

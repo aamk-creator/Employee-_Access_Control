@@ -1,0 +1,208 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_employee_access_company_tree" model="ir.ui.view">
+        <field name="name">res.company.employee.access.tree</field>
+        <field name="model">res.company</field>
+        <field name="arch" type="xml">
+            <list string="Companies" import="0" export_xlsx="0">
+                <field name="name"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_employee_access_company_search" model="ir.ui.view">
+        <field name="name">res.company.employee.access.search</field>
+        <field name="model">res.company</field>
+        <field name="arch" type="xml">
+            <search string="Companies">
+                <field name="name"/>
+            </search>
+        </field>
+    </record>
+
+    <record id="action_employee_access_companies" model="ir.actions.act_window">
+        <field name="name">Companies</field>
+        <field name="res_model">res.company</field>
+        <field name="view_mode">list,form</field>
+        <field name="view_id" ref="employee_access_control.view_employee_access_company_tree"/>
+        <field name="search_view_id" ref="employee_access_control.view_employee_access_company_search"/>
+        <field name="context">{}</field>
+    </record>
+
+    <record id="action_employee_access_dashboard" model="ir.actions.client">
+        <field name="name">Dashboard</field>
+        <field name="tag">employee_access_control.dashboard</field>
+    </record>
+
+    <record id="action_employee_access_requests" model="ir.actions.client">
+        <field name="name">Requests</field>
+        <field name="tag">display_notification</field>
+        <field name="params" eval="{
+            'title': 'Requests',
+            'message': 'Use the Odoo User Account Requests menu to create and manage requests.',
+            'type': 'info',
+            'sticky': False,
+        }"/>
+    </record>
+
+    <record id="action_employee_access_asset_requests" model="ir.actions.client">
+        <field name="name">Asset Requests</field>
+        <field name="tag">display_notification</field>
+        <field name="params" eval="{
+            'title': 'Asset Requests',
+            'message': 'Asset request workflows will be available in a later phase.',
+            'type': 'info',
+            'sticky': False,
+        }"/>
+    </record>
+
+    <menuitem
+        id="menu_employee_access_root"
+        name="Employee Access Control"
+        action="employee_access_control.action_employee_access_system"
+        sequence="80"
+        groups="employee_access_control.group_employee_access_user"
+    />
+
+    <menuitem
+        id="menu_employee_access_dashboard"
+        name="Dashboard"
+        parent="employee_access_control.menu_employee_access_root"
+        action="employee_access_control.action_employee_access_dashboard"
+        sequence="10"
+        groups="employee_access_control.group_employee_access_user"
+    />
+
+    <menuitem
+        id="menu_employee_access_requests"
+        name="Requests"
+        parent="employee_access_control.menu_employee_access_root"
+        sequence="20"
+        groups="employee_access_control.group_employee_access_user"
+    />
+
+    <menuitem
+        id="menu_employee_access_user_account_requests"
+        name="Odoo User Account Requests"
+        parent="employee_access_control.menu_employee_access_requests"
+        action="employee_access_control.action_employee_access_request"
+        sequence="10"
+        groups="employee_access_control.group_employee_access_user"
+    />
+
+    <menuitem
+        id="menu_employee_access_created_users"
+        name="Created Users"
+        parent="employee_access_control.menu_employee_access_requests"
+        action="employee_access_control.action_employee_access_created_users"
+        sequence="20"
+        groups="employee_access_control.group_employee_access_user"
+    />
+
+    <menuitem
+        id="menu_employee_access_system_overview"
+        name="System Overview"
+        parent="employee_access_control.menu_employee_access_root"
+        action="employee_access_control.action_employee_access_system_overview"
+        sequence="30"
+        groups="employee_access_control.group_employee_access_user"
+    />
+
+    <menuitem
+        id="menu_employee_access_asset_requests"
+        name="Asset Requests"
+        parent="employee_access_control.menu_employee_access_root"
+        action="employee_access_control.action_employee_access_asset_requests"
+        sequence="40"
+        groups="employee_access_control.group_employee_access_user"
+    />
+
+    <menuitem
+        id="menu_employee_access_configuration"
+        name="Configuration"
+        parent="employee_access_control.menu_employee_access_root"
+        sequence="100"
+        groups="employee_access_control.group_employee_access_administrator"
+    />
+
+    <menuitem
+        id="menu_eac_approval_rules"
+        name="Approval Rules"
+        parent="employee_access_control.menu_employee_access_configuration"
+        action="employee_access_control.action_employee_access_approval_rule"
+        sequence="10"
+        groups="employee_access_control.group_employee_access_administrator"
+    />
+
+    <menuitem
+        id="menu_eac_companies"
+        name="Companies"
+        parent="employee_access_control.menu_employee_access_configuration"
+        action="employee_access_control.action_employee_access_companies"
+        sequence="20"
+        groups="employee_access_control.group_employee_access_administrator"
+    />
+
+    <menuitem
+        id="menu_eac_facilities"
+        name="Facilities"
+        parent="employee_access_control.menu_employee_access_configuration"
+        action="employee_access_control.action_employee_access_facility"
+        sequence="30"
+        groups="employee_access_control.group_employee_access_administrator"
+    />
+
+    <menuitem
+        id="menu_eac_systems"
+        name="Systems"
+        parent="employee_access_control.menu_employee_access_configuration"
+        action="employee_access_control.action_employee_access_system"
+        sequence="40"
+        groups="employee_access_control.group_employee_access_administrator"
+    />
+
+    <menuitem
+        id="menu_eac_system_tags"
+        name="System Tags"
+        parent="employee_access_control.menu_employee_access_configuration"
+        action="employee_access_control.action_employee_access_system_tag"
+        sequence="50"
+        groups="employee_access_control.group_employee_access_administrator"
+    />
+
+    <menuitem
+        id="menu_eac_applications"
+        name="Applications"
+        parent="employee_access_control.menu_employee_access_configuration"
+        action="employee_access_control.action_employee_access_application"
+        sequence="60"
+        groups="employee_access_control.group_employee_access_administrator"
+    />
+
+    <menuitem
+        id="menu_eac_groups"
+        name="Groups"
+        parent="employee_access_control.menu_employee_access_configuration"
+        action="employee_access_control.action_employee_access_group"
+        sequence="70"
+        groups="employee_access_control.group_employee_access_administrator"
+    />
+
+    <menuitem
+        id="menu_eac_access_profiles"
+        name="Access Profiles"
+        parent="employee_access_control.menu_employee_access_configuration"
+        action="employee_access_control.action_employee_access_profile"
+        sequence="80"
+        groups="employee_access_control.group_employee_access_administrator"
+    />
+
+    <menuitem
+        id="menu_eac_provisioning_tasks"
+        name="Vendor Tickets"
+        parent="employee_access_control.menu_employee_access_requests"
+        action="employee_access_control.action_employee_access_provision_task"
+        sequence="30"
+        groups="employee_access_control.group_employee_access_administrator"
+    />
+</odoo>

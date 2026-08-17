@@ -1,0 +1,47 @@
+.eac_application_roles {
+    display: grid;
+    gap: 10px;
+    max-width: 720px;
+    padding: 4px 0 12px;
+}
+
+.eac_application_role_row {
+    display: grid;
+    grid-template-columns: minmax(170px, 1fr) minmax(260px, 2fr);
+    align-items: center;
+    gap: 20px;
+    min-height: 38px;
+}
+
+.eac_application_role_row__label {
+    color: #172b3d;
+    font-weight: 600;
+    margin: 0;
+}
+
+.eac_application_role_row__select {
+    width: 100%;
+    min-height: 38px;
+    border: 0;
+    border-bottom: 1px solid #8ea2b3;
+    border-radius: 0;
+    background-color: transparent;
+    box-shadow: none;
+}
+
+.eac_application_role_row__select:focus {
+    border-color: #0f7f86;
+    box-shadow: 0 1px 0 #0f7f86;
+}
+
+.eac_application_roles__loading {
+    color: #6b7d8e;
+    font-style: italic;
+}
+
+@media (max-width: 760px) {
+    .eac_application_role_row {
+        grid-template-columns: 1fr;
+        gap: 6px;
+    }
+}

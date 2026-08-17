@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_employee_access_approval_rule_search" model="ir.ui.view">
+        <field name="name">employee.access.approval.rule.search</field>
+        <field name="model">employee.access.approval.rule</field>
+        <field name="arch" type="xml">
+            <search string="Approval Rules">
+                <field name="name"/>
+                <field name="model_name"/>
+                <field name="company_id"/>
+                <filter name="filter_active" string="Active" domain="[('active', '=', True)]"/>
+                <filter name="filter_archived" string="Archived" domain="[('active', '=', False)]"/>
+                <group>
+                    <filter name="group_by_model" string="Model" context="{'group_by': 'model_name'}"/>
+                    <filter name="group_by_company" string="Company" context="{'group_by': 'company_id'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <record id="view_employee_access_approval_rule_tree" model="ir.ui.view">
+        <field name="name">employee.access.approval.rule.list</field>
+        <field name="model">employee.access.approval.rule</field>
+        <field name="arch" type="xml">
+            <list string="Approval Rules" default_order="sequence, name">
+                <field name="name"/>
+                <field name="model_name" string="Model"/>
+                <field name="company_id"/>
+                <field name="sequence" column_invisible="True"/>
+                <field name="active" column_invisible="True"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_employee_access_approval_rule_form" model="ir.ui.view">
+        <field name="name">employee.access.approval.rule.form</field>
+        <field name="model">employee.access.approval.rule</field>
+        <field name="arch" type="xml">
+            <form string="Approval Rule">
+                <sheet>
+                    <widget name="web_ribbon" title="Archived" bg_color="text-bg-danger" invisible="active"/>
+                    <div class="oe_title">
+                        <h1>
+                            <field name="name" placeholder="Approval Rule"/>
+                        </h1>
+                    </div>
+                    <group>
+                        <group>
+                            <field name="model_name"/>
+                        </group>
+                        <group>
+                            <field name="company_id"/>
+                        </group>
+                    </group>
+                    <field name="approval_step_ids" nolabel="1">
+                        <list editable="bottom" default_order="sequence, id">
+                            <field name="sequence" widget="handle"/>
+                            <field name="name"/>
+                            <field name="mandatory"/>
+                            <field name="approval_type" string="Type"/>
+                            <field name="approver_user_id"
+                                   optional="show"
+                                   invisible="approval_type != 'by_user'"/>
+                        </list>
+                    </field>
+                    <field name="request_type" invisible="True"/>
+                    <field name="approver_type" invisible="True"/>
+                    <field name="approver_user_id" invisible="True"/>
+                    <field name="approver_group_id" invisible="True"/>
+                    <field name="minimum_approvals" invisible="True"/>
+                    <field name="sequence" invisible="True"/>
+                    <field name="system_id" invisible="True"/>
+                    <field name="application_id" invisible="True"/>
+                    <field name="access_group_id" invisible="True"/>
+                    <field name="description" invisible="True"/>
+                    <field name="active" invisible="True"/>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_employee_access_approval_rule" model="ir.actions.act_window">
+        <field name="name">Approval Rules</field>
+        <field name="res_model">employee.access.approval.rule</field>
+        <field name="view_mode">list,form</field>
+        <field name="view_id" ref="employee_access_control.view_employee_access_approval_rule_tree"/>
+        <field name="search_view_id" ref="employee_access_control.view_employee_access_approval_rule_search"/>
+        <field name="context">{'search_default_filter_active': 1}</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">Create approval rules for employee access workflows.</p>
+        </field>
+    </record>
+</odoo>

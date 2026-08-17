@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+    <t t-name="employee_access_control.DashboardAction">
+        <div class="o_employee_access_dashboard">
+            <header class="eac_dashboard_header">
+                <div>
+                    <p class="eac_dashboard_eyebrow">System Overview</p>
+                    <h1>Users Access Control Dashboard</h1>
+                </div>
+                <button
+                    type="button"
+                    class="btn btn-light eac_refresh_button"
+                    title="Refresh dashboard"
+                    t-on-click="refreshDashboard"
+                    t-att-disabled="state.loading"
+                >
+                    <i class="fa fa-refresh" aria-hidden="true"/>
+                    <span>Refresh</span>
+                </button>
+            </header>
+
+            <section class="eac_dashboard_loading" t-if="state.loading">
+                <div class="eac_loading_row" t-foreach="[1, 2]" t-as="item" t-key="item">
+                    <span t-foreach="[1, 2, 3, 4]" t-as="block" t-key="block"/>
+                </div>
+            </section>
+
+            <section class="eac_dashboard_error" t-elif="state.error">
+                Dashboard data could not be loaded.
+            </section>
+
+            <section class="eac_system_rows" t-else="">
+                <article
+                    class="eac_system_row"
+                    t-foreach="state.systems"
+                    t-as="system"
+                    t-key="system.name"
+                >
+                    <button
+                        type="button"
+                        class="eac_metric eac_metric--licensed"
+                        t-att-disabled="!system.id"
+                        t-on-click="() => this.openSystem(system)"
+                    >
+                        <span class="eac_metric_system" t-esc="system.name"/>
+                        <strong t-esc="this.formatNumber(system.licensed_users)"/>
+                        <span class="eac_metric_label">Licensed Users</span>
+                        <span class="eac_utilization_track">
+                            <span
+                                class="eac_utilization_value"
+                                t-att-style="'width: ' + system.utilization_bar_percent + '%'"
+                            />
+                        </span>
+                        <small><t t-esc="system.utilization_percent"/>% utilized</small>
+                    </button>
+
+                    <button
+                        type="button"
+                        class="eac_metric eac_metric--active"
+                        t-att-disabled="!system.id"
+                        t-on-click="() => this.openUsers(system, 'active')"
+                    >
+                        <i class="fa fa-check-circle" aria-hidden="true"/>
+                        <strong t-esc="this.formatNumber(system.active_users)"/>
+                        <span class="eac_metric_label">Active Users</span>
+                        <small>Vendor completed</small>
+                    </button>
+
+                    <button
+                        type="button"
+                        class="eac_metric eac_metric--swap"
+                        t-att-disabled="!system.id"
+                        t-on-click="() => this.openUsers(system)"
+                    >
+                        <i class="fa fa-exchange" aria-hidden="true"/>
+                        <strong t-esc="this.formatNumber(system.swap_users)"/>
+                        <span class="eac_metric_label">Swap Available</span>
+                        <small>Licensed minus active</small>
+                    </button>
+
+                    <button
+                        type="button"
+                        class="eac_metric eac_metric--inactive"
+                        t-att-disabled="!system.id"
+                        t-on-click="() => this.openUsers(system, 'inactive')"
+                    >
+                        <i class="fa fa-pause-circle" aria-hidden="true"/>
+                        <strong t-esc="this.formatNumber(system.inactive_users)"/>
+                        <span class="eac_metric_label">Inactive Users</span>
+                        <small>Available to reactivate</small>
+                    </button>
+                </article>
+            </section>
+        </div>
+    </t>
+</templates>
