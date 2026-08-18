@@ -49,7 +49,7 @@
                             <field name="facility_ids" widget="many2many_tags"/>
                             <field name="tag_ids" widget="many2many_tags" options="{'color_field': 'color'}"/>
                             <field name="total_licensed_users"/>
-                            <field name="mail_recipient_ids" widget="many2many_tags_email" placeholder="vendor@smeintellect.com"/>
+                            <field name="mail_recipient_ids" widget="many2many_tags_email" placeholder="vendor@mail.com"/>
                             <field name="sequence"/>
                             <field name="active"/>
                         </group>
