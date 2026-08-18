@@ -1,5 +1,3 @@
-# Root dependency entrypoint for this repository.
-# Install with:
-#   pip install -r requirements.txt
-
--r odoo-19.0.post20260812/requirements.txt
+# Extra Python dependencies for this custom addon repository.
+# Odoo.sh provides the Odoo runtime and its own base requirements.
+# Add only third-party packages needed by this repository's custom code.
