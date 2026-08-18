@@ -144,6 +144,16 @@ class EmployeeAccessProvisionTask(models.Model):
         string="User Status",
         readonly=True,
     )
+    employee_email = fields.Char(
+        related="request_id.employee_email",
+        string="Employee Email",
+        readonly=True,
+    )
+    fingerprint_id = fields.Char(
+        related="request_id.fingerprint_id",
+        string="Fingerprint ID",
+        readonly=True,
+    )
     assigned_user_id = fields.Many2one(
         "res.users",
         string="Assigned To",

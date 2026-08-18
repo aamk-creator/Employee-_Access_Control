@@ -818,15 +818,7 @@ class EmployeeAccessRequest(models.Model):
 
     def _existing_profile_system_domain(self):
         self.ensure_one()
-        system_ids = self.system_id.ids
-        if self.system_id.name == "Odoo Standard":
-            light_system = self.env["employee.access.system"].search(
-                [("name", "=", "Odoo Light")],
-                limit=1,
-            )
-            if light_system:
-                system_ids = list(set(system_ids + light_system.ids))
-        return [("system_id", "in", system_ids)] if system_ids else []
+        return [("system_id", "=", self.system_id.id)] if self.system_id else []
 
     def _find_existing_active_profile(self):
         self.ensure_one()

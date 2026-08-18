@@ -26,91 +26,91 @@
     <record id="employee_access_facility_rule_company" model="ir.rule">
         <field name="name">Employee Access Facility multi-company</field>
         <field name="model_id" ref="model_employee_access_facility"/>
-        <field name="domain_force">[('company_id', 'in', user.company_ids.ids)]</field>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
         <field name="groups" eval="[Command.link(ref('employee_access_control.group_employee_access_user'))]"/>
     </record>
 
     <record id="employee_access_system_tag_rule_company" model="ir.rule">
         <field name="name">Employee Access System Tag multi-company</field>
         <field name="model_id" ref="model_employee_access_system_tag"/>
-        <field name="domain_force">[('company_id', 'in', user.company_ids.ids)]</field>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
         <field name="groups" eval="[Command.link(ref('employee_access_control.group_employee_access_user'))]"/>
     </record>
 
     <record id="employee_access_system_rule_company" model="ir.rule">
         <field name="name">Employee Access System multi-company</field>
         <field name="model_id" ref="model_employee_access_system"/>
-        <field name="domain_force">[('company_id', 'in', user.company_ids.ids)]</field>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
         <field name="groups" eval="[Command.link(ref('employee_access_control.group_employee_access_user'))]"/>
     </record>
 
     <record id="employee_access_application_rule_company" model="ir.rule">
         <field name="name">Employee Access Application multi-company</field>
         <field name="model_id" ref="model_employee_access_application"/>
-        <field name="domain_force">[('company_id', 'in', user.company_ids.ids)]</field>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
         <field name="groups" eval="[Command.link(ref('employee_access_control.group_employee_access_user'))]"/>
     </record>
 
     <record id="employee_access_group_rule_company" model="ir.rule">
         <field name="name">Employee Access Group multi-company</field>
         <field name="model_id" ref="model_employee_access_group"/>
-        <field name="domain_force">[('company_id', 'in', user.company_ids.ids)]</field>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
         <field name="groups" eval="[Command.link(ref('employee_access_control.group_employee_access_user'))]"/>
     </record>
 
     <record id="employee_access_approval_rule_rule_company" model="ir.rule">
         <field name="name">Employee Access Approval Rule multi-company</field>
         <field name="model_id" ref="model_employee_access_approval_rule"/>
-        <field name="domain_force">[('company_id', 'in', user.company_ids.ids)]</field>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
         <field name="groups" eval="[Command.link(ref('employee_access_control.group_employee_access_user'))]"/>
     </record>
 
     <record id="employee_access_approval_step_rule_company" model="ir.rule">
         <field name="name">Employee Access Approval Step multi-company</field>
         <field name="model_id" ref="model_employee_access_approval_step"/>
-        <field name="domain_force">[('company_id', 'in', user.company_ids.ids)]</field>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
         <field name="groups" eval="[Command.link(ref('employee_access_control.group_employee_access_user'))]"/>
     </record>
 
     <record id="employee_access_request_rule_company" model="ir.rule">
         <field name="name">Employee Access Request multi-company</field>
         <field name="model_id" ref="model_employee_access_request"/>
-        <field name="domain_force">[('company_id', 'in', user.company_ids.ids)]</field>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
         <field name="groups" eval="[Command.link(ref('employee_access_control.group_employee_access_user'))]"/>
     </record>
 
     <record id="employee_access_request_application_line_rule_company" model="ir.rule">
         <field name="name">Employee Access Request Application multi-company</field>
         <field name="model_id" ref="model_employee_access_request_application_line"/>
-        <field name="domain_force">[('request_id.company_id', 'in', user.company_ids.ids)]</field>
+        <field name="domain_force">[('request_id.company_id', 'in', company_ids)]</field>
         <field name="groups" eval="[Command.link(ref('employee_access_control.group_employee_access_user'))]"/>
     </record>
 
     <record id="employee_access_request_approval_line_rule_company" model="ir.rule">
         <field name="name">Employee Access Request Approval multi-company</field>
         <field name="model_id" ref="model_employee_access_request_approval_line"/>
-        <field name="domain_force">[('company_id', 'in', user.company_ids.ids)]</field>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
         <field name="groups" eval="[Command.link(ref('employee_access_control.group_employee_access_user'))]"/>
     </record>
 
     <record id="employee_access_profile_rule_company" model="ir.rule">
         <field name="name">Employee Access Profile multi-company</field>
         <field name="model_id" ref="model_employee_access_profile"/>
-        <field name="domain_force">[('company_id', 'in', user.company_ids.ids)]</field>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
         <field name="groups" eval="[Command.link(ref('employee_access_control.group_employee_access_user'))]"/>
     </record>
 
     <record id="employee_access_provision_task_rule_company" model="ir.rule">
         <field name="name">Employee Access Provision Task multi-company</field>
         <field name="model_id" ref="model_employee_access_provision_task"/>
-        <field name="domain_force">[('company_id', 'in', user.company_ids.ids)]</field>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
         <field name="groups" eval="[Command.link(ref('employee_access_control.group_employee_access_user'))]"/>
     </record>
 
     <record id="employee_access_audit_log_rule_company" model="ir.rule">
         <field name="name">Employee Access Audit Log multi-company</field>
         <field name="model_id" ref="model_employee_access_audit_log"/>
-        <field name="domain_force">[('company_id', 'in', user.company_ids.ids)]</field>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
         <field name="groups" eval="[Command.link(ref('employee_access_control.group_employee_access_user'))]"/>
     </record>
 

@@ -64,6 +64,8 @@
             <list string="Vendor Tickets">
                 <field name="ticket_reference"/>
                 <field name="request_id"/>
+                <field name="employee_email"/>
+                <field name="fingerprint_id"/>
                 <field name="vendor_email"/>
                 <field name="system_id"/>
                 <field name="state" widget="badge" decoration-info="state == 'in_progress'" decoration-warning="state == 'pending'" decoration-success="state == 'done'" decoration-danger="state == 'failed'"/>

@@ -70,6 +70,104 @@ class TestEmployeeAccessRequest(TransactionCase):
                 max(system.total_licensed_users - expected_active, 0),
             )
 
+    def test_active_company_filters_requests_and_dashboard(self):
+        current_company = self.env.company
+        other_company = self.env["res.company"].create(
+            {"name": "Employee Access Isolation Test Company"}
+        )
+        self.env.user.sudo().write(
+            {"company_ids": [Command.link(other_company.id)]}
+        )
+        access_user = self.env["res.users"].with_context(
+            no_reset_password=True
+        ).create(
+            {
+                "name": "Employee Access Isolation Test User",
+                "login": "employee.access.isolation.test",
+                "company_id": current_company.id,
+                "company_ids": [
+                    Command.set([current_company.id, other_company.id])
+                ],
+                "group_ids": [
+                    Command.link(
+                        self.env.ref(
+                            "employee_access_control.group_employee_access_user"
+                        ).id
+                    )
+                ],
+            }
+        )
+
+        current_system = self.env["employee.access.system"].search(
+            [
+                ("name", "=", "Odoo Standard"),
+                ("company_id", "=", current_company.id),
+            ],
+            limit=1,
+        )
+        other_system = (
+            self.env["employee.access.system"]
+            .sudo()
+            .with_context(allowed_company_ids=[other_company.id])
+            .create(
+                {
+                    "name": "Odoo Standard",
+                    "company_id": other_company.id,
+                    "total_licensed_users": 10,
+                }
+            )
+        )
+        Request = self.env["employee.access.request"].sudo()
+        current_request = Request.create(
+            {
+                "employee_name": "Current Company User",
+                "employee_email": "current.company@example.com",
+                "company_id": current_company.id,
+                "system_id": current_system.id,
+                "state": "active",
+            }
+        )
+        other_request = Request.with_context(
+            allowed_company_ids=[other_company.id]
+        ).create(
+            {
+                "employee_name": "Other Company User",
+                "employee_email": "other.company@example.com",
+                "company_id": other_company.id,
+                "system_id": other_system.id,
+                "state": "active",
+            }
+        )
+
+        candidate_ids = [current_request.id, other_request.id]
+        current_company_requests = (
+            self.env["employee.access.request"]
+            .with_user(access_user)
+            .with_context(allowed_company_ids=[current_company.id])
+            .search([("id", "in", candidate_ids)])
+        )
+        other_company_requests = (
+            self.env["employee.access.request"]
+            .with_user(access_user)
+            .with_context(allowed_company_ids=[other_company.id])
+            .search([("id", "in", candidate_ids)])
+        )
+
+        self.assertEqual(current_company_requests.ids, current_request.ids)
+        self.assertEqual(other_company_requests.ids, other_request.ids)
+
+        dashboard_rows = (
+            self.env["employee.access.system"]
+            .with_user(access_user)
+            .with_context(allowed_company_ids=[other_company.id])
+            .get_dashboard_data()
+        )
+        standard_row = next(
+            row for row in dashboard_rows if row["name"] == "Odoo Standard"
+        )
+        self.assertEqual(standard_row["active_users"], 1)
+        self.assertEqual(standard_row["licensed_users"], 10)
+
     def test_internal_employee_access_module_is_excluded(self):
         Application = self.env["employee.access.application"].with_context(
             active_test=False
@@ -649,7 +747,38 @@ class TestEmployeeAccessRequest(TransactionCase):
             "to_approve",
         )
 
-    def test_existing_active_access_forces_update_request_type(self):
+    def test_same_system_existing_active_access_forces_update_request_type(self):
+        systems = self.env["employee.access.system"].search(
+            [("name", "in", ["Odoo Light", "Odoo Standard"])],
+            order="name asc",
+        )
+        light_system = systems.filtered(lambda system: system.name == "Odoo Light")[:1]
+        self.assertTrue(light_system)
+
+        self.env["employee.access.profile"].create(
+            {
+                "employee_name": "Upgrade User",
+                "employee_email": "upgrade@example.com",
+                "company_id": self.env.company.id,
+                "system_id": light_system.id,
+                "state": "active",
+            }
+        )
+
+        request = self.env["employee.access.request"].new(
+            {
+                "employee_name": "Upgrade User",
+                "employee_email": "upgrade@example.com",
+                "company_id": self.env.company.id,
+                "system_id": light_system.id,
+            }
+        )
+        request._onchange_system_id()
+
+        self.assertEqual(request.request_type, "update")
+        self.assertTrue(request.duplicate_create_blocked)
+
+    def test_light_to_standard_access_defaults_to_create_request_type(self):
         systems = self.env["employee.access.system"].search(
             [("name", "in", ["Odoo Light", "Odoo Standard"])],
             order="name asc",
@@ -679,8 +808,41 @@ class TestEmployeeAccessRequest(TransactionCase):
         )
         request._onchange_system_id()
 
-        self.assertEqual(request.request_type, "update")
-        self.assertTrue(request.duplicate_create_blocked)
+        self.assertEqual(request.request_type, "create")
+        self.assertFalse(request.duplicate_create_blocked)
+
+    def test_standard_to_light_access_defaults_to_create_request_type(self):
+        systems = self.env["employee.access.system"].search(
+            [("name", "in", ["Odoo Light", "Odoo Standard"])],
+            order="name asc",
+        )
+        light_system = systems.filtered(lambda system: system.name == "Odoo Light")[:1]
+        standard_system = systems.filtered(lambda system: system.name == "Odoo Standard")[:1]
+        self.assertTrue(light_system)
+        self.assertTrue(standard_system)
+
+        self.env["employee.access.profile"].create(
+            {
+                "employee_name": "Downgrade User",
+                "employee_email": "downgrade@example.com",
+                "company_id": self.env.company.id,
+                "system_id": standard_system.id,
+                "state": "active",
+            }
+        )
+
+        request = self.env["employee.access.request"].new(
+            {
+                "employee_name": "Downgrade User",
+                "employee_email": "downgrade@example.com",
+                "company_id": self.env.company.id,
+                "system_id": light_system.id,
+            }
+        )
+        request._onchange_system_id()
+
+        self.assertEqual(request.request_type, "create")
+        self.assertFalse(request.duplicate_create_blocked)
 
     def test_duplicate_create_is_normalized_to_update(self):
         system = self.env["employee.access.system"].search(

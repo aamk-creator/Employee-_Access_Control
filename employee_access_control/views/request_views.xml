@@ -72,9 +72,10 @@
         <field name="model">employee.access.request</field>
         <field name="arch" type="xml">
             <list string="Created Users" create="0" edit="0" delete="0" import="0">
-                <field name="reference" string="Name"/>
+                <field name="reference" string="Request ID"/>
                 <field name="request_date" string="Date" widget="request_date_ddmmyy"/>
                 <field name="employee_display_name" string="Employee"/>
+                <field name="employee_email"/>
                 <field name="fingerprint_id"/>
                 <field name="department"/>
                 <field name="position"/>
@@ -123,8 +124,10 @@
         <field name="model">employee.access.request</field>
         <field name="arch" type="xml">
             <list string="System Overview" create="0" edit="0" delete="0" import="0">
-                <field name="overview_name" string="Name"/>
+                <field name="reference" string="Request ID"/>
                 <field name="employee_display_name" string="Employee"/>
+                <field name="employee_email"/>
+                <field name="fingerprint_id"/>
                 <field name="position" string="Job Position"/>
                 <field name="department"/>
                 <field name="system_id"/>
@@ -220,21 +223,7 @@
                             <field name="existing_access_message" invisible="1"/>
                             <field name="request_type"
                                    widget="radio"
-                                   invisible="duplicate_create_blocked"/>
-                            <label for="request_type" string="Request Type" invisible="not duplicate_create_blocked"/>
-                            <div invisible="not duplicate_create_blocked">
-                                <div class="text-muted mb-2">
-                                    <span class="fa fa-circle-o me-2"/>
-                                    Create
-                                </div>
-                                <div class="text-primary fw-bold">
-                                    <span class="fa fa-dot-circle-o me-2"/>
-                                    Update
-                                </div>
-                            </div>
-                            <div class="text-primary fw-bold"
-                                 invisible="not duplicate_create_blocked">
-                            </div>
+                                   readonly="duplicate_create_blocked"/>
                             <label for="existing_access_message"
                                    string=" "
                                    invisible="not existing_access_message"/>

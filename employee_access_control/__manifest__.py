@@ -2,7 +2,7 @@
     "name": "Employee Access Control",
     "version": "19.0.1.0.0",
     "summary": "Configuration foundation for employee access management",
-    "author": "OpenAI Codex",
+    "author": "aamk",
     "category": "Human Resources",
     "license": "LGPL-3",
     "depends": ["base", "web", "mail"],
