@@ -3,11 +3,78 @@ import re
 from odoo import api, fields, models
 
 
+ADDITIONAL_SEEDED_APPLICATIONS = [
+    ("EHR", "Main Cashier (Treasury)"),
+]
+
+
 class EmployeeAccessApplication(models.Model):
     _name = "employee.access.application"
     _description = "Employee Access Application"
     _order = "sequence, name, id"
     _check_company_auto = True
+
+    @api.model
+    def _load_sample_applications(self):
+        from .access_group import APPLICATION_ROLE_GROUPS
+
+        company = self.env.company
+        system_model = self.env["employee.access.system"].sudo().with_context(
+            active_test=False
+        )
+        application_model = self.sudo().with_context(active_test=False)
+        system_names = ["Odoo Light", "Odoo Standard", "EHR", "LIMS"]
+        systems_by_name = {}
+
+        for sequence, system_name in enumerate(system_names, start=1):
+            system = system_model.search(
+                [("company_id", "=", company.id), ("name", "=", system_name)],
+                limit=1,
+            )
+            if system:
+                if not system.active:
+                    system.active = True
+            else:
+                system = system_model.create(
+                    {
+                        "name": system_name,
+                        "company_id": company.id,
+                        "sequence": sequence * 10,
+                    }
+                )
+            systems_by_name[system_name] = system
+
+        application_pairs = sorted(
+            {
+                (system_name, application_name)
+                for _, application_name, system_name in APPLICATION_ROLE_GROUPS
+            }
+            | set(ADDITIONAL_SEEDED_APPLICATIONS),
+            key=lambda item: (system_names.index(item[0]), item[1]),
+        )
+        for system_name, application_name in application_pairs:
+            system = systems_by_name[system_name]
+            application = application_model.search(
+                [
+                    ("company_id", "=", company.id),
+                    ("system_id", "=", system.id),
+                    ("name", "=", application_name),
+                ],
+                limit=1,
+            )
+            values = {
+                "company_id": company.id,
+                "system_id": system.id,
+                "name": application_name,
+                "active": True,
+                "sequence": 10,
+            }
+            if application:
+                application.write(values)
+            else:
+                application_model.create(values)
+
+        return True
 
     @api.model
     def _exclude_internal_employee_access_modules(self):

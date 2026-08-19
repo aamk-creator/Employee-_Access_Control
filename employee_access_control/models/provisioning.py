@@ -221,6 +221,13 @@ class EmployeeAccessProvisionTask(models.Model):
 
     def init(self):
         self.env.cr.execute(
+            "SELECT to_regclass('employee_access_provision_task'), to_regclass('employee_access_request')"
+        )
+        task_table, request_table = self.env.cr.fetchone()
+        if not task_table or not request_table:
+            return
+
+        self.env.cr.execute(
             """
             UPDATE employee_access_provision_task task
                SET ticket_reference = request.reference

@@ -184,6 +184,56 @@ class TestEmployeeAccessRequest(TransactionCase):
         self.assertTrue(applications)
         self.assertFalse(any(applications.mapped("active")))
 
+    def test_sample_applications_are_seeded_and_idempotent(self):
+        Application = self.env["employee.access.application"].with_context(
+            active_test=False
+        )
+
+        Application._load_sample_applications()
+        seeded_before = Application.search(
+            [
+                ("company_id", "=", self.env.company.id),
+                (
+                    "system_id.name",
+                    "in",
+                    ["Odoo Light", "Odoo Standard", "EHR", "LIMS"],
+                ),
+                ("active", "=", True),
+            ]
+        )
+        Application._load_sample_applications()
+        seeded_after = Application.search(
+            [
+                ("company_id", "=", self.env.company.id),
+                (
+                    "system_id.name",
+                    "in",
+                    ["Odoo Light", "Odoo Standard", "EHR", "LIMS"],
+                ),
+                ("active", "=", True),
+            ]
+        )
+
+        self.assertTrue(
+            seeded_after.filtered(
+                lambda application: application.name == "Accountant"
+                and application.system_id.name == "EHR"
+            )
+        )
+        self.assertTrue(
+            seeded_after.filtered(
+                lambda application: application.name == "Accounting"
+                and application.system_id.name == "Odoo Standard"
+            )
+        )
+        self.assertTrue(
+            seeded_after.filtered(
+                lambda application: application.name == "Main Cashier (Treasury)"
+                and application.system_id.name == "EHR"
+            )
+        )
+        self.assertEqual(set(seeded_after.ids), set(seeded_before.ids))
+
     def test_company_seed_is_complete_and_idempotent(self):
         company_names = {
             "CLL Health Holdings Ltd",

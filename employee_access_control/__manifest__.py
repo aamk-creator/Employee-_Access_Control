@@ -1,6 +1,6 @@
 {
     "name": "Employee Access Control",
-    "version": "19.0.1.0.0",
+    "version": "19.0.4.0.0",
     "summary": "Configuration foundation for employee access management",
     "author": "aamk",
     "category": "Human Resources",

@@ -1,3 +1,4 @@
-# Extra Python dependencies for this custom addon repository.
-# Odoo.sh provides the Odoo runtime and its own base requirements.
-# Add only third-party packages needed by this repository's custom code.
+# Odoo.sh reads this file during build.
+# This repository does not require extra pip packages beyond the standard Odoo runtime.
+# Keep this file comment-only unless the custom addon imports a real third-party library.
+# Do not add core Odoo dependencies here (for example: odoo, psycopg2, werkzeug, markupsafe).

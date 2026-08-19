@@ -25,7 +25,20 @@ Odoo 19 based internal system for managing employee access requests, approvals, 
 - Vendor email compose flow from the ticket page
 - Chatter history for vendor communication and notifications
 
-## Requirements
+## Odoo.sh Readiness
+
+- Custom addon code is in `employee_access_control/`
+- `requirements.txt` intentionally contains no installable packages because this addon only uses the standard Odoo runtime
+- Local-only items are already ignored: `.venv/`, `.odoo-data/`, `odoo.conf`, logs, downloaded Odoo source, and zip artifacts
+- PowerShell scripts in `scripts/` are for local Windows development only and are not used by Odoo.sh
+
+Before pushing to Odoo.sh:
+
+- keep only the custom addon, repository docs, and optional helper files in Git
+- do not commit your local Odoo core source or generated runtime data
+- if you later import a real third-party Python library in custom code, add that package to `requirements.txt`
+
+## Local Development Requirements
 
 - Python 3.12 recommended
 - PostgreSQL
@@ -99,17 +112,17 @@ $env:PYTHONPATH='C:\Employee Access Control System\odoo-19.0.post20260812'
 
 ## GitHub Notes
 
-Before pushing to GitHub:
+Before pushing to GitHub or Odoo.sh:
 
 - keep real `odoo.conf` local only
-- use `odoo.conf.example` in the repository
+- use `odoo.conf.example` in the repository as a local sample only
 - confirm no local logs or runtime data are included
 - confirm `.venv/` and `.odoo-data/` are ignored
 - keep the local Odoo core source outside GitHub unless you intentionally want to vendor it
 
 Recommended next step:
 
-- document the exact Odoo 19 source package or repository your team should download locally
+- connect the Git repository to Odoo.sh and install `employee_access_control` from the Apps menu after the build finishes
 
 ## License
 
