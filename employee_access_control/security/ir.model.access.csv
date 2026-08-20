@@ -25,3 +25,5 @@
 "access_employee_access_provision_task_admin","employee.access.provision.task.admin","model_employee_access_provision_task","employee_access_control.group_employee_access_administrator",1,1,1,1
 "access_employee_access_audit_log_user","employee.access.audit.log.user","model_employee_access_audit_log","employee_access_control.group_employee_access_user",1,0,0,0
 "access_employee_access_audit_log_admin","employee.access.audit.log.admin","model_employee_access_audit_log","employee_access_control.group_employee_access_administrator",1,0,0,0
+"access_employee_access_header_company_user","employee.access.header.company.user","model_employee_access_header_company","employee_access_control.group_employee_access_user",1,0,0,0
+"access_employee_access_header_company_admin","employee.access.header.company.admin","model_employee_access_header_company","employee_access_control.group_employee_access_administrator",1,1,1,1

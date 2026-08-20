@@ -128,6 +128,8 @@ class EmployeeAccessApplication(models.Model):
     )
     description = fields.Text()
     url = fields.Char(string="URL")
+
+    
     active = fields.Boolean(default=True)
     sequence = fields.Integer(default=10)
 

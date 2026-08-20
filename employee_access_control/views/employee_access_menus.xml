@@ -29,6 +29,24 @@
         <field name="context">{}</field>
     </record>
 
+    <record id="view_employee_access_header_company_list" model="ir.ui.view">
+        <field name="name">employee.access.header.company.list</field>
+        <field name="model">employee.access.header.company</field>
+        <field name="arch" type="xml">
+            <list string="Header Companies" editable="bottom">
+                <field name="sequence" widget="handle"/>
+                <field name="company_id"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="action_employee_access_header_companies" model="ir.actions.act_window">
+        <field name="name">Header Companies</field>
+        <field name="res_model">employee.access.header.company</field>
+        <field name="view_mode">list</field>
+        <field name="view_id" ref="employee_access_control.view_employee_access_header_company_list"/>
+    </record>
+
     <record id="action_employee_access_dashboard" model="ir.actions.client">
         <field name="name">Dashboard</field>
         <field name="tag">employee_access_control.dashboard</field>
@@ -148,6 +166,15 @@
         name="Facilities"
         parent="employee_access_control.menu_employee_access_configuration"
         action="employee_access_control.action_employee_access_facility"
+        sequence="40"
+        groups="employee_access_control.group_employee_access_administrator"
+    />
+
+    <menuitem
+        id="menu_eac_header_companies"
+        name="Header Companies"
+        parent="employee_access_control.menu_employee_access_configuration"
+        action="employee_access_control.action_employee_access_header_companies"
         sequence="30"
         groups="employee_access_control.group_employee_access_administrator"
     />
