@@ -128,6 +128,7 @@ class EmployeeAccessSystem(models.Model):
                     "id": system.id if system else False,
                     "name": system_name,
                     "licensed_users": licensed_users,
+                    "need_purchase_users": max(active_users - licensed_users, 0),
                     "active_users": active_users,
                     "swap_users": max(licensed_users - active_users, 0),
                     "inactive_users": inactive_users,

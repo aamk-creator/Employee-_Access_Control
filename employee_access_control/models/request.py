@@ -34,16 +34,50 @@ class EmployeeAccessRequest(models.Model):
         return self._applications_for_system(self._default_system_id())
 
     @api.model
-    def _application_line_commands(self, system):
+    def _application_line_commands(self, system, profile=None):
+        existing_application_ids = set(profile.application_ids.ids) if profile else set()
+        previous_lines_by_application = {}
+        if profile and profile.last_request_id.system_id == system:
+            previous_lines_by_application = {
+                line.application_id.id: line
+                for line in profile.last_request_id.application_line_ids
+                if not line.remove_access
+            }
+
         return [
             Command.create(
                 {
                     "application_id": application.id,
-                    "access_group_id": self._default_access_group(application).id,
+                    "access_group_id": self._existing_or_default_access_group(
+                        application,
+                        previous_lines_by_application.get(application.id),
+                        use_default=not profile or application.id in existing_application_ids,
+                    ).id,
+                    "remove_access": bool(
+                        profile and application.id not in existing_application_ids
+                    ),
                 }
             )
             for application in self._applications_for_system(system)
         ]
+
+    @api.model
+    def _existing_or_default_access_group(
+        self, application, previous_line, use_default=True
+    ):
+        previous_group = (
+            previous_line.access_group_id
+            if previous_line
+            else self.env["employee.access.group"]
+        )
+        if (
+            previous_group
+            and previous_group.active
+            and previous_group.application_id == application
+            and previous_group.display_type == "application_role"
+        ):
+            return previous_group
+        return self._default_access_group(application) if use_default else previous_group
 
     @api.model
     def _default_access_group(self, application):
@@ -116,15 +150,14 @@ class EmployeeAccessRequest(models.Model):
         copy=False,
         default=lambda self: self.env["ir.sequence"].next_by_code("employee.access.request") or "New",
     )
-    employee_name = fields.Char(string="Manual Employee Name", required=True)
+    employee_name = fields.Char(string="Employee Name", required=True)
     employee_source = fields.Selection(
         [
             ("odoo_user", "Odoo User"),
-            ("manual", "Manual Entry"),
         ],
         string="Employee Source",
         required=True,
-        default="manual",
+        default="odoo_user",
         tracking=True,
     )
     requested_user_id = fields.Many2one(
@@ -206,6 +239,18 @@ class EmployeeAccessRequest(models.Model):
     application_count = fields.Integer(
         string="Selected Modules",
         compute="_compute_application_count",
+    )
+    overview_application_names = fields.Char(
+        string="Application Modules",
+        compute="_compute_overview_access_details",
+        store=True,
+        readonly=True,
+    )
+    overview_access_role_names = fields.Char(
+        string="Access Roles",
+        compute="_compute_overview_access_details",
+        store=True,
+        readonly=True,
     )
     required_privileged_access = fields.Boolean(string="Required Privileged Access")
     manager_approver_id = fields.Many2one(
@@ -336,6 +381,24 @@ class EmployeeAccessRequest(models.Model):
         for request in self:
             request.application_count = len(request.application_ids)
 
+    @api.depends(
+        "application_line_ids.application_id.name",
+        "application_line_ids.access_group_id.name",
+        "application_line_ids.remove_access",
+        "application_line_ids.sequence",
+    )
+    def _compute_overview_access_details(self):
+        for request in self:
+            included_lines = request.application_line_ids.filtered(
+                lambda line: not line.remove_access
+            ).sorted(lambda line: (line.sequence, line.application_id.name or ""))
+            request.overview_application_names = ", ".join(
+                included_lines.mapped("application_id.name")
+            )
+            request.overview_access_role_names = ", ".join(
+                line.access_group_id.name or "No Role" for line in included_lines
+            )
+
     @api.depends("state", "system_id.name")
     def _compute_workflow_status_label(self):
         for request in self:
@@ -451,9 +514,10 @@ class EmployeeAccessRequest(models.Model):
     @api.onchange("system_id")
     def _onchange_system_id(self):
         for request in self:
+            profile = request._find_existing_active_profile()
             request.application_line_ids = [
                 Command.clear(),
-                *self._application_line_commands(request.system_id),
+                *self._application_line_commands(request.system_id, profile=profile),
             ]
             if request.system_id:
                 request.manager_approver_id = (
@@ -464,12 +528,15 @@ class EmployeeAccessRequest(models.Model):
                     request._get_credential_approver()
                     or request._fallback_approval_user()
                 )
-            request._sync_request_type_with_existing_access()
+            request._prefill_existing_active_access(profile=profile, include_applications=False)
 
     @api.onchange("employee_name", "employee_email", "fingerprint_id", "company_id")
     def _onchange_employee_identity(self):
         for request in self:
-            request._sync_request_type_with_existing_access()
+            request._prefill_existing_active_access(
+                profile=request._find_existing_active_profile_any_system(),
+                sync_system=True,
+            )
 
     @api.onchange("requested_user_id")
     def _onchange_requested_user_id(self):
@@ -480,12 +547,17 @@ class EmployeeAccessRequest(models.Model):
                 request.employee_email = (
                     request.requested_user_id.email or request.requested_user_id.login
                 )
-
-    @api.onchange("employee_source")
-    def _onchange_employee_source(self):
-        for request in self:
-            if request.employee_source == "manual":
-                request.requested_user_id = False
+                request.fingerprint_id = (
+                    request.requested_user_id.employee_access_fingerprint_id
+                )
+                request.department = (
+                    request.requested_user_id.employee_access_department
+                )
+                request.position = request.requested_user_id.employee_access_position
+                request._prefill_existing_active_access(
+                    profile=request._find_existing_active_profile_any_system(),
+                    sync_system=True,
+                )
 
     @api.model_create_multi
     def create(self, vals_list):
@@ -496,6 +568,18 @@ class EmployeeAccessRequest(models.Model):
                 vals["employee_source"] = "odoo_user"
                 vals["employee_name"] = requested_user.name
                 vals["employee_email"] = requested_user.email or requested_user.login
+                vals.setdefault(
+                    "fingerprint_id",
+                    requested_user.employee_access_fingerprint_id,
+                )
+                vals.setdefault(
+                    "department",
+                    requested_user.employee_access_department,
+                )
+                vals.setdefault(
+                    "position",
+                    requested_user.employee_access_position,
+                )
             if "application_line_ids" not in vals:
                 system = self.env["employee.access.system"].browse(
                     vals.get("system_id")
@@ -519,8 +603,6 @@ class EmployeeAccessRequest(models.Model):
 
     def write(self, vals):
         vals = dict(vals)
-        if vals.get("employee_source") == "manual":
-            vals["requested_user_id"] = False
         requested_user = self.env["res.users"].browse(vals.get("requested_user_id"))
         if requested_user:
             vals.update(
@@ -529,6 +611,18 @@ class EmployeeAccessRequest(models.Model):
                     "employee_name": requested_user.name,
                     "employee_email": requested_user.email or requested_user.login,
                 }
+            )
+            vals.setdefault(
+                "fingerprint_id",
+                requested_user.employee_access_fingerprint_id,
+            )
+            vals.setdefault(
+                "department",
+                requested_user.employee_access_department,
+            )
+            vals.setdefault(
+                "position",
+                requested_user.employee_access_position,
             )
         if "system_id" in vals and "application_line_ids" not in vals:
             system = self.env["employee.access.system"].browse(vals["system_id"])
@@ -557,7 +651,11 @@ class EmployeeAccessRequest(models.Model):
     @api.constrains("employee_source", "requested_user_id")
     def _check_employee_source(self):
         for request in self:
-            if request.employee_source == "odoo_user" and not request.requested_user_id:
+            if (
+                request.employee_source == "odoo_user"
+                and not request.requested_user_id
+                and not self.env.context.get("employee_access_allow_unlinked_user")
+            ):
                 raise ValidationError("Select an Odoo User for the employee source.")
 
     @api.constrains("system_id", "application_line_ids")
@@ -580,6 +678,33 @@ class EmployeeAccessRequest(models.Model):
                AND employee_source != 'odoo_user'
             """
         )
+
+    @api.model
+    def _migrate_manual_employees_to_odoo_users(self):
+        requests = self.sudo().with_context(active_test=False).search(
+            ["|", ("requested_user_id", "=", False), ("employee_source", "!=", "odoo_user")],
+            order="id",
+        )
+        Users = self.env["res.users"]
+        for request in requests:
+            user = Users._employee_access_get_or_create(
+                name=request.employee_name,
+                fingerprint=request.fingerprint_id,
+                email=request.employee_email,
+                department=request.department,
+                position=request.position,
+                company=request.company_id,
+            )
+            super(
+                EmployeeAccessRequest,
+                request.with_context(tracking_disable=True),
+            ).write(
+                {
+                    "employee_source": "odoo_user",
+                    "requested_user_id": user.id,
+                }
+            )
+        return True
 
     def action_submit(self):
         self._normalize_request_type_from_existing_access()
@@ -831,6 +956,16 @@ class EmployeeAccessRequest(models.Model):
             limit=1,
         )
 
+    def _find_existing_active_profile_any_system(self):
+        self.ensure_one()
+        if not self.company_id:
+            return self.env["employee.access.profile"]
+        return self.env["employee.access.profile"].search(
+            self._matching_profile_domain(),
+            order="id desc",
+            limit=1,
+        )
+
     def _get_or_create_profile(self):
         self.ensure_one()
         profile = self.profile_id or self._find_existing_active_profile()
@@ -879,6 +1014,40 @@ class EmployeeAccessRequest(models.Model):
             self.request_type = "update"
         elif self.request_type != "create":
             self.request_type = "create"
+
+    def _prefill_existing_active_access(
+        self, profile=None, include_applications=True, sync_system=False
+    ):
+        self.ensure_one()
+        profile = profile or self._find_existing_active_profile()
+        if not profile:
+            self._sync_request_type_with_existing_access()
+            return
+
+        if sync_system and self.system_id != profile.system_id:
+            self.system_id = profile.system_id
+            self.manager_approver_id = (
+                self._get_erp_admin_approver() or self._fallback_approval_user()
+            )
+            self.credential_approver_id = (
+                self._get_credential_approver() or self._fallback_approval_user()
+            )
+
+        if sync_system:
+            self.employee_name = profile.employee_name
+            self.fingerprint_id = profile.fingerprint_id
+            self.employee_email = profile.employee_email
+            self.department = profile.department
+            self.position = profile.position
+        self.request_type = "update"
+        self.access_company_ids = [Command.set(profile.access_company_ids.ids)]
+        self.access_facility_ids = [Command.set(profile.access_facility_ids.ids)]
+        self.required_privileged_access = profile.required_privileged_access
+        if include_applications:
+            self.application_line_ids = [
+                Command.clear(),
+                *self._application_line_commands(self.system_id, profile=profile),
+            ]
 
     def _normalize_request_type_from_existing_access(self):
         for request in self:

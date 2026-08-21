@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <function model="employee.access.request" name="_migrate_manual_employees_to_odoo_users"/>
+</odoo>

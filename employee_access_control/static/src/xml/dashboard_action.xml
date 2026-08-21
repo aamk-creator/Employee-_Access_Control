@@ -21,7 +21,7 @@
 
             <section class="eac_dashboard_loading" t-if="state.loading">
                 <div class="eac_loading_row" t-foreach="[1, 2]" t-as="item" t-key="item">
-                    <span t-foreach="[1, 2, 3, 4]" t-as="block" t-key="block"/>
+                    <span t-foreach="[1, 2, 3, 4, 5]" t-as="block" t-key="block"/>
                 </div>
             </section>
 
@@ -44,7 +44,7 @@
                     >
                         <span class="eac_metric_system" t-esc="system.name"/>
                         <strong t-esc="this.formatNumber(system.licensed_users)"/>
-                        <span class="eac_metric_label">Licensed Users</span>
+                        <span class="eac_metric_label">Total Licensed Users</span>
                         <span class="eac_utilization_track">
                             <span
                                 class="eac_utilization_value"
@@ -52,6 +52,18 @@
                             />
                         </span>
                         <small><t t-esc="system.utilization_percent"/>% utilized</small>
+                    </button>
+
+                    <button
+                        type="button"
+                        class="eac_metric eac_metric--purchase"
+                        t-att-disabled="!system.id"
+                        t-on-click="() => this.openUsers(system, 'active')"
+                    >
+                        <i class="fa fa-plus" aria-hidden="true"/>
+                        <strong t-esc="this.formatNumber(system.need_purchase_users)"/>
+                        <span class="eac_metric_label">Need To Purchase Licensed Users</span>
+                        <small>Active users above licensed capacity</small>
                     </button>
 
                     <button

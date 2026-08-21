@@ -7,5 +7,6 @@ from . import header_company
 from . import mail_compose_message
 from . import provisioning
 from . import request
+from . import res_users
 from . import system
 from . import system_tag

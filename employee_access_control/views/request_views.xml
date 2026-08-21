@@ -71,7 +71,7 @@
         <field name="name">employee.access.request.created.user.tree</field>
         <field name="model">employee.access.request</field>
         <field name="arch" type="xml">
-            <list string="Created Users" create="0" edit="0" delete="0" import="0">
+            <list string="Created Users" create="0" edit="0" delete="1" import="0">
                 <field name="reference" string="Request ID"/>
                 <field name="request_date" string="Date" widget="request_date_ddmmyy"/>
                 <field name="employee_display_name" string="Employee"/>
@@ -130,14 +130,9 @@
                 <field name="fingerprint_id"/>
                 <field name="position" string="Job Position"/>
                 <field name="department"/>
-                <field name="system_id"/>
-                <field name="active_date" widget="request_date_ddmmyy"/>
-                <field name="inactive_date" widget="request_date_ddmmyy"/>
-                <field name="access_status"
-                       string="Status"
-                       widget="badge"
-                       decoration-success="access_status == 'active'"
-                       decoration-muted="access_status == 'inactive'"/>
+                <field name="system_id" string="System Type"/>
+                <field name="overview_application_names" string="Application Modules"/>
+                <field name="overview_access_role_names" string="Access Roles"/>
             </list>
         </field>
     </record>
@@ -202,17 +197,14 @@
                             <field name="requested_user_id"
                                    string="Odoo User"
                                    widget="many2one_avatar_user"
-                                   invisible="employee_source != 'odoo_user'"
-                                   required="employee_source == 'odoo_user'"
+                                   required="1"
                                    options="{'no_create': True, 'no_create_edit': True}"/>
                             <field name="employee_name"
-                                   string="Manual Employee Name"
-                                   invisible="employee_source != 'manual'"
-                                   required="employee_source == 'manual'"/>
-                            <field name="fingerprint_id"/>
-                            <field name="employee_email"/>
-                            <field name="department"/>
-                            <field name="position"/>
+                                   invisible="1"/>
+                            <field name="fingerprint_id" readonly="1"/>
+                            <field name="employee_email" readonly="1"/>
+                            <field name="department" readonly="1"/>
+                            <field name="position" readonly="1"/>
                             <field name="company_id"/>
                         </group>
                         <group>
@@ -239,28 +231,24 @@
                     </group>
                     <notebook>
                         <page string="Access Rights" name="access_rights">
-                            <group col="1">
-                                <group string="APPLICATION ACCESS" col="1">
-                                    <field name="application_line_ids"
-                                           nolabel="1"
-                                           widget="application_role_dropdowns">
-                                        <list create="0" delete="0" default_order="sequence, application_id">
-                                            <field name="sequence" column_invisible="True"/>
-                                            <field name="application_id"
-                                                   string="Application"
-                                                   readonly="1"
-                                                   force_save="1"/>
-                                            <field name="access_group_id"
-                                                   string="Access"
-                                                   options="{'no_create': True, 'no_create_edit': True}"/>
-                                            <field name="remove_access"
-                                                   string="Remove"
-                                                   optional="hide"
-                                                   invisible="parent.request_type != 'update'"/>
-                                        </list>
-                                    </field>
-                                </group>
-                            </group>
+                            <field name="application_line_ids"
+                                   nolabel="1"
+                                   widget="application_role_dropdowns">
+                                <list create="0" delete="0" default_order="sequence, application_id">
+                                    <field name="sequence" column_invisible="True"/>
+                                    <field name="application_id"
+                                           string="Application"
+                                           readonly="1"
+                                           force_save="1"/>
+                                    <field name="access_group_id"
+                                           string="Access"
+                                           options="{'no_create': True, 'no_create_edit': True}"/>
+                                    <field name="remove_access"
+                                           string="Remove"
+                                           optional="hide"
+                                           invisible="parent.request_type != 'update'"/>
+                                </list>
+                            </field>
                         </page>
                         <page string="Notes" name="notes">
                             <group string="Business Justification">
@@ -353,7 +341,7 @@
         <field name="view_id" ref="employee_access_control.view_employee_access_created_user_request_tree"/>
         <field name="search_view_id" ref="employee_access_control.view_employee_access_request_search"/>
         <field name="domain">[('state', 'in', ['active', 'inactive'])]</field>
-        <field name="context">{'create': False, 'edit': False, 'delete': False}</field>
+        <field name="context">{'create': False, 'edit': False}</field>
     </record>
 
     <record id="action_employee_access_system_overview" model="ir.actions.act_window">

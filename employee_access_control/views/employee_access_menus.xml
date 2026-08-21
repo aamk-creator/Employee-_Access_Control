@@ -170,14 +170,10 @@
         groups="employee_access_control.group_employee_access_administrator"
     />
 
-    <menuitem
-        id="menu_eac_header_companies"
-        name="Header Companies"
-        parent="employee_access_control.menu_employee_access_configuration"
-        action="employee_access_control.action_employee_access_header_companies"
-        sequence="30"
-        groups="employee_access_control.group_employee_access_administrator"
-    />
+    <record id="menu_eac_header_companies" model="ir.ui.menu">
+        <field name="name">Header Companies</field>
+        <field name="active">False</field>
+    </record>
 
     <menuitem
         id="menu_eac_systems"
@@ -215,14 +211,10 @@
         groups="employee_access_control.group_employee_access_administrator"
     />
 
-    <menuitem
-        id="menu_eac_access_profiles"
-        name="Access Profiles"
-        parent="employee_access_control.menu_employee_access_configuration"
-        action="employee_access_control.action_employee_access_profile"
-        sequence="80"
-        groups="employee_access_control.group_employee_access_administrator"
-    />
+    <record id="menu_eac_access_profiles" model="ir.ui.menu">
+        <field name="name">Access Profiles</field>
+        <field name="active">False</field>
+    </record>
 
     <menuitem
         id="menu_eac_provisioning_tasks"

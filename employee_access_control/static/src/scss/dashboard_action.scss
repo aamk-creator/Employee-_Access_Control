@@ -77,7 +77,7 @@
 .eac_system_row,
 .eac_loading_row {
     display: grid;
-    grid-template-columns: minmax(230px, 1.15fr) repeat(3, minmax(190px, 1fr));
+    grid-template-columns: minmax(230px, 1.15fr) repeat(4, minmax(180px, 1fr));
     gap: 16px;
     padding: 18px;
     border: 1px solid var(--eac-dashboard-border);
@@ -196,14 +196,19 @@
     color: #126c40;
 }
 
+.eac_metric--purchase {
+    background: #f9dede;
+    color: #922f35;
+}
+
 .eac_metric--swap {
     background: #ffedb8;
     color: #7b5100;
 }
 
 .eac_metric--inactive {
-    background: #e7ecf1;
-    color: #3d4c5a;
+    background: #d7d9dc;
+    color: #3f454a;
 }
 
 .eac_utilization_track {

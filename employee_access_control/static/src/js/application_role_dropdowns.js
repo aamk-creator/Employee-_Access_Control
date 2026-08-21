@@ -99,6 +99,7 @@ export class ApplicationRoleDropdowns extends X2ManyField {
         const role = this.roleOptions(line).find((option) => option.id === roleId);
         await line.update({
             access_group_id: role ? { id: role.id, display_name: role.name } : false,
+            remove_access: !role,
         });
     }
 }

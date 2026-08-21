@@ -1,37 +1,75 @@
 .eac_application_roles {
     display: grid;
-    gap: 10px;
-    max-width: 720px;
-    padding: 4px 0 12px;
+    gap: 0;
+    max-width: 566px;
+    padding: 28px 0 20px;
+}
+
+.eac_application_roles__title {
+    padding-bottom: 7px;
+    margin-bottom: 14px;
+    border-bottom: 1px solid #d8dde2;
+    color: #172b3d;
+    font-size: 13px;
+    font-weight: 700;
 }
 
 .eac_application_role_row {
     display: grid;
-    grid-template-columns: minmax(170px, 1fr) minmax(260px, 2fr);
+    grid-template-columns: 150px minmax(0, 395px);
     align-items: center;
-    gap: 20px;
+    column-gap: 20px;
     min-height: 38px;
 }
 
 .eac_application_role_row__label {
     color: #172b3d;
     font-weight: 600;
+    font-size: 13px;
+    line-height: 18px;
     margin: 0;
 }
 
-.eac_application_role_row__select {
-    width: 100%;
-    min-height: 38px;
-    border: 0;
-    border-bottom: 1px solid #8ea2b3;
-    border-radius: 0;
-    background-color: transparent;
-    box-shadow: none;
+.eac_application_role_row__help {
+    position: relative;
+    top: -0.25em;
+    margin-left: 3px;
+    color: #007b9a;
+    cursor: help;
+    font-size: 10px;
+    font-weight: 700;
 }
 
+.eac_application_role_row__select {
+    appearance: none;
+    width: 100%;
+    min-height: 28px;
+    padding: 2px 22px 2px 0;
+    border: 0;
+    border-bottom: 1px solid transparent;
+    border-radius: 0;
+    background-color: transparent;
+    background-image: none;
+    background-position: right 8px center;
+    background-repeat: no-repeat;
+    background-size: 10px 10px;
+    box-shadow: none;
+    color: #172b3d;
+    font-size: 13px;
+    line-height: 20px;
+}
+
+.eac_application_role_row__select:hover,
 .eac_application_role_row__select:focus {
     border-color: #0f7f86;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill='none' stroke='%23172b3d' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='m4 6 4 4 4-4'/%3E%3C/svg%3E");
     box-shadow: 0 1px 0 #0f7f86;
+}
+
+.eac_application_role_row__select:disabled {
+    opacity: 1;
+    color: #172b3d;
+    cursor: default;
 }
 
 .eac_application_roles__loading {
@@ -40,8 +78,14 @@
 }
 
 @media (max-width: 760px) {
+    .eac_application_roles {
+        max-width: 100%;
+        padding-top: 20px;
+    }
+
     .eac_application_role_row {
         grid-template-columns: 1fr;
         gap: 6px;
+        padding: 6px 0;
     }
 }

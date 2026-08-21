@@ -2,6 +2,7 @@
 <templates xml:space="preserve">
     <t t-name="employee_access_control.ApplicationRoleDropdowns">
         <div class="eac_application_roles">
+            <div class="eac_application_roles__title">APPLICATION ACCESS</div>
             <div class="eac_application_roles__loading" t-if="roleState.loading">
                 Loading access options...
             </div>
@@ -13,9 +14,13 @@
             >
                 <label class="eac_application_role_row__label">
                     <t t-esc="applicationName(line)"/>
+                    <span
+                        class="eac_application_role_row__help"
+                        t-att-title="`Select the access role for ${applicationName(line)}`"
+                    >?</span>
                 </label>
                 <select
-                    class="form-select eac_application_role_row__select"
+                    class="eac_application_role_row__select"
                     t-att-value="selectedRoleId(line)"
                     t-att-disabled="props.readonly"
                     t-on-change="(event) => this.onRoleChange(line, event)"
