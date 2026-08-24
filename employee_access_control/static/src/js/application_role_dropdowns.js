@@ -98,7 +98,10 @@ export class ApplicationRoleDropdowns extends X2ManyField {
         const roleId = Number(event.target.value) || false;
         const role = this.roleOptions(line).find((option) => option.id === roleId);
         await line.update({
-            access_group_id: role ? { id: role.id, display_name: role.name } : false,
+            // Odoo 17 expects a Many2one client value as [id, display_name].
+            // Passing the object shape used by newer clients makes
+            // _preprocessMany2oneChanges try to iterate a non-iterable value.
+            access_group_id: role ? [role.id, role.name] : false,
             remove_access: !role,
         });
     }

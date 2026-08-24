@@ -7,12 +7,6 @@ from odoo.exceptions import ValidationError
 class TestEmployeeAccessRequest(TransactionCase):
     def setUp(self):
         super().setUp()
-        self.env = self.env(
-            context={
-                **self.env.context,
-                "employee_access_allow_unlinked_user": True,
-            }
-        )
 
     def _send_composer_action(self, action):
         self.assertEqual(action["res_model"], "mail.compose.message")
@@ -26,7 +20,6 @@ class TestEmployeeAccessRequest(TransactionCase):
     def _complete_approval_flow(self, request):
         request.action_submit()
         request.with_user(request.manager_approver_id).action_manager_approve()
-        request.with_user(request.credential_approver_id).action_approve()
         request.invalidate_recordset()
 
     def test_system_owner_domain_uses_odoo_company_value(self):
@@ -49,6 +42,215 @@ class TestEmployeeAccessRequest(TransactionCase):
         )
 
         self.assertEqual(system.code, "NEW_PAYROLL_SYSTEM")
+
+    def test_odoo_system_ui_configuration_is_seeded(self):
+        System = self.env["employee.access.system"]
+        System._configure_odoo_systems()
+
+        expected_values = {
+            "Odoo Light": (
+                "light",
+                "Light Users",
+                "HRMS Admin(Light)",
+            ),
+            "Odoo Standard": (
+                "standard",
+                "Standard Users",
+                "ERP Admin (Standard)",
+            ),
+        }
+        for system_name, (user_type, tag_name, request_step_name) in (
+            expected_values.items()
+        ):
+            system = System.search(
+                [
+                    ("company_id", "=", self.env.company.id),
+                    ("name", "=", system_name),
+                ],
+                limit=1,
+            )
+            self.assertTrue(system.is_odoo_system)
+            self.assertEqual(system.user_type, user_type)
+            self.assertIn(tag_name, system.tag_ids.mapped("name"))
+            self.assertEqual(system.request_approver_step_id.name, request_step_name)
+            self.assertFalse(system.handover_approver_step_id)
+
+        system_view = self.env.ref(
+            "employee_access_control.view_employee_access_system_form"
+        )
+        self.assertIn("recipient_employee_ids", system_view.arch_db)
+        self.assertIn('name="mail_recipient_ids" invisible="1"', system_view.arch_db)
+
+    def test_system_approver_configuration_controls_request_workflow(self):
+        system = self.env["employee.access.system"].search(
+            [
+                ("company_id", "=", self.env.company.id),
+                ("name", "=", "Odoo Standard"),
+            ],
+            limit=1,
+        )
+        system._configure_odoo_systems()
+        approval_rule = self.env["employee.access.approval.rule"].search(
+            [
+                ("company_id", "=", self.env.company.id),
+                ("model_name", "=", "employee_access_control"),
+                ("active", "=", True),
+            ],
+            limit=1,
+        )
+        request_step = approval_rule.approval_step_ids.filtered(
+            lambda step: step.name == "ERP Admin (Standard)"
+        )[:1]
+        handover_step = approval_rule.approval_step_ids.filtered(
+            lambda step: step.name == "Mark Done"
+        )[:1]
+        request_approver = self.env["res.users"].create(
+            {
+                "name": "Configured Request Approver",
+                "login": "configured.request.approver@example.com",
+                "email": "configured.request.approver@example.com",
+                "company_id": self.env.company.id,
+                "company_ids": [Command.set(self.env.company.ids)],
+            }
+        )
+        handover_approver = self.env["res.users"].create(
+            {
+                "name": "Configured Handover Approver",
+                "login": "configured.handover.approver@example.com",
+                "email": "configured.handover.approver@example.com",
+                "company_id": self.env.company.id,
+                "company_ids": [Command.set(self.env.company.ids)],
+            }
+        )
+        request_step.approver_user_id = request_approver
+        handover_step.approver_user_id = handover_approver
+        system.write(
+            {
+                "request_approver_step_id": request_step.id,
+                "handover_approver_step_id": handover_step.id,
+            }
+        )
+        employee = self.env["hr.employee"].create(
+            {
+                "name": "Configured Workflow Employee",
+                "company_id": self.env.company.id,
+            }
+        )
+        request = self.env["employee.access.request"].create(
+            {
+                "employee_id": employee.id,
+                "company_id": self.env.company.id,
+                "system_id": system.id,
+            }
+        )
+
+        self.assertEqual(request._get_erp_admin_approver(), request_approver)
+        self.assertEqual(request._get_mark_done_user(), handover_approver)
+        self.assertEqual(request.manager_approver_id, request_approver)
+        self.assertEqual(request.mark_done_user_id, handover_approver)
+
+    def test_facility_catalog_is_seeded_for_all_companies_and_idempotent(self):
+        Facility = self.env["employee.access.facility"].with_context(
+            active_test=False
+        )
+        companies = self.env["res.company"].with_context(active_test=False).search([])
+        catalog = Facility._employee_access_facility_catalog
+        catalog_codes = [label.rsplit(" - ", 1)[1] for label in catalog]
+
+        Facility._ensure_employee_access_facilities()
+        initial_count = Facility.search_count([("code", "in", catalog_codes)])
+        Facility._ensure_employee_access_facilities()
+
+        self.assertEqual(
+            Facility.search_count([("code", "in", catalog_codes)]),
+            initial_count,
+        )
+        for company in companies:
+            facilities = Facility.search(
+                [
+                    ("company_id", "=", company.id),
+                    ("code", "in", catalog_codes),
+                ]
+            )
+            self.assertEqual(len(facilities), 32)
+            self.assertEqual(set(facilities.mapped("name")), set(catalog))
+            self.assertTrue(all(facilities.mapped("active")))
+
+    def test_new_company_automatically_receives_facility_catalog(self):
+        company = self.env["res.company"].create(
+            {"name": "Facility Catalog Test Company"}
+        )
+        facilities = self.env["employee.access.facility"].search(
+            [("company_id", "=", company.id)]
+        )
+
+        self.assertEqual(len(facilities), 32)
+        self.assertIn("P005", facilities.mapped("code"))
+        self.assertIn("L018", facilities.mapped("code"))
+
+    def test_access_facilities_follow_selected_company_across_companies(self):
+        access_company = self.env["res.company"].create(
+            {"name": "Cross Company Facility Parent"}
+        )
+        facility = self.env["employee.access.facility"].search(
+            [("company_id", "=", access_company.id)],
+            limit=1,
+        )
+        system = self.env["employee.access.system"].search([], limit=1)
+
+        request = self.env["employee.access.request"].create(
+            {
+                "employee_name": "Cross Company Facility Selection User",
+                "company_id": self.env.company.id,
+                "system_id": system.id,
+                "access_company_ids": [Command.set(access_company.ids)],
+                "access_facility_ids": [Command.set(facility.ids)],
+            }
+        )
+
+        self.assertEqual(request.access_company_ids, access_company)
+        self.assertEqual(request.access_facility_ids, facility)
+
+        current_company_facility = self.env["employee.access.facility"].search(
+            [("company_id", "=", self.env.company.id)],
+            limit=1,
+        )
+        with self.assertRaisesRegex(
+            ValidationError,
+            "Every access facility must belong",
+        ):
+            request.access_facility_ids = [Command.set(current_company_facility.ids)]
+
+    def test_removing_access_company_clears_its_facilities(self):
+        first_company, second_company = self.env["res.company"].create(
+            [
+                {"name": "First Facility Parent"},
+                {"name": "Second Facility Parent"},
+            ]
+        )
+        first_facility = self.env["employee.access.facility"].search(
+            [("company_id", "=", first_company.id)],
+            limit=1,
+        )
+        second_facility = self.env["employee.access.facility"].search(
+            [("company_id", "=", second_company.id)],
+            limit=1,
+        )
+        request = self.env["employee.access.request"].new(
+            {
+                "access_company_ids": [
+                    Command.set([first_company.id, second_company.id])
+                ],
+                "access_facility_ids": [
+                    Command.set([first_facility.id, second_facility.id])
+                ],
+            }
+        )
+
+        request.access_company_ids = [Command.set(first_company.ids)]
+        request._onchange_access_company_ids()
+
+        self.assertEqual(request.access_facility_ids.ids, first_facility.ids)
 
     def test_dashboard_uses_system_license_and_created_user_counts(self):
         rows = self.env["employee.access.system"].get_dashboard_data()
@@ -80,8 +282,34 @@ class TestEmployeeAccessRequest(TransactionCase):
             )
             self.assertEqual(
                 row["swap_users"],
-                max(system.total_licensed_users - expected_active, 0),
+                (
+                    max(system.total_licensed_users - expected_active, 0)
+                    if expected_active
+                    else 0
+                ),
             )
+
+    def test_dashboard_swap_is_zero_without_active_users(self):
+        system = self.env["employee.access.system"].search(
+            [
+                ("name", "=", "Odoo Light"),
+                ("company_id", "=", self.env.company.id),
+            ],
+            limit=1,
+        )
+        self.env["employee.access.request"].search(
+            [("system_id", "=", system.id), ("state", "=", "active")]
+        ).write({"state": "draft"})
+        system.total_licensed_users = 100
+
+        row = next(
+            row
+            for row in system.get_dashboard_data()
+            if row["name"] == "Odoo Light"
+        )
+
+        self.assertEqual(row["active_users"], 0)
+        self.assertEqual(row["swap_users"], 0)
 
     def test_dashboard_purchase_count_increases_above_license_capacity(self):
         system = self.env["employee.access.system"].search(
@@ -141,7 +369,7 @@ class TestEmployeeAccessRequest(TransactionCase):
                 "company_ids": [
                     Command.set([current_company.id, other_company.id])
                 ],
-                "group_ids": [
+                "groups_id": [
                     Command.link(
                         self.env.ref(
                             "employee_access_control.group_employee_access_user"
@@ -209,6 +437,18 @@ class TestEmployeeAccessRequest(TransactionCase):
         self.assertEqual(current_company_requests.ids, current_request.ids)
         self.assertEqual(other_company_requests.ids, other_request.ids)
 
+        other_company_facility = self.env["employee.access.facility"].sudo().search(
+            [("company_id", "=", other_company.id)],
+            limit=1,
+        )
+        visible_other_company_facility = (
+            self.env["employee.access.facility"]
+            .with_user(access_user)
+            .with_context(allowed_company_ids=[current_company.id])
+            .search([("id", "=", other_company_facility.id)])
+        )
+        self.assertEqual(visible_other_company_facility, other_company_facility)
+
         dashboard_rows = (
             self.env["employee.access.system"]
             .with_user(access_user)
@@ -225,17 +465,27 @@ class TestEmployeeAccessRequest(TransactionCase):
         Application = self.env["employee.access.application"].with_context(
             active_test=False
         )
+        system = self.env["employee.access.system"].search(
+            [("name", "in", ["Odoo Light", "Odoo Standard"])],
+            limit=1,
+        )
+        internal_application = Application.search(
+            [
+                ("name", "=", "Employee Access Control"),
+                ("system_id", "=", system.id),
+            ],
+            limit=1,
+        ) or Application.create(
+            {
+                "name": "Employee Access Control",
+                "company_id": system.company_id.id,
+                "system_id": system.id,
+            }
+        )
 
         Application._exclude_internal_employee_access_modules()
 
-        applications = Application.search(
-            [
-                ("name", "=", "Employee Access Control"),
-                ("system_id.name", "in", ["Odoo Light", "Odoo Standard"]),
-            ]
-        )
-        self.assertTrue(applications)
-        self.assertFalse(any(applications.mapped("active")))
+        self.assertFalse(internal_application.active)
 
     def test_sample_applications_are_seeded_and_idempotent(self):
         Application = self.env["employee.access.application"].with_context(
@@ -374,21 +624,79 @@ class TestEmployeeAccessRequest(TransactionCase):
 
         self.assertEqual(defaults.get("system_id"), expected_system.id)
 
-    def test_employee_source_only_supports_odoo_user(self):
+    def test_employee_source_uses_employees_module(self):
         system = self.env["employee.access.system"].search([], limit=1)
-        odoo_request = self.env["employee.access.request"].create(
+        department = self.env["hr.department"].create(
+            {"name": "Operations", "company_id": self.env.company.id}
+        )
+        job = self.env["hr.job"].create(
+            {"name": "Officer", "company_id": self.env.company.id}
+        )
+        employee = self.env["hr.employee"].create(
             {
-                "requested_user_id": self.env.user.id,
+                "name": "Employees Module Employee",
+                "work_email": "module.employee@example.com",
+                "department_id": department.id,
+                "job_id": job.id,
+                "employee_access_fingerprint_id": "EMP-001",
+                "company_id": self.env.company.id,
+            }
+        )
+        request = self.env["employee.access.request"].create(
+            {
+                "employee_id": employee.id,
                 "company_id": self.env.company.id,
                 "system_id": system.id,
             }
         )
+
         self.assertEqual(
             dict(self.env["employee.access.request"]._fields["employee_source"].selection),
-            {"odoo_user": "Odoo User"},
+            {"employee": "Employees Module"},
         )
-        self.assertEqual(odoo_request.employee_source, "odoo_user")
-        self.assertEqual(odoo_request.employee_display_name, self.env.user.name)
+        self.assertEqual(request.employee_source, "employee")
+        self.assertEqual(request.employee_display_name, employee.name)
+        self.assertEqual(request.employee_email, employee.work_email)
+        self.assertEqual(request.fingerprint_id, "EMP-001")
+        self.assertEqual(request.department, department.name)
+        self.assertEqual(request.position, job.name)
+
+    def test_request_form_uses_single_employee_name_selector(self):
+        employee_field = self.env["employee.access.request"].fields_get(
+            ["employee_id"],
+            ["string"],
+        )["employee_id"]
+        form_view = self.env.ref(
+            "employee_access_control.view_employee_access_request_form"
+        )
+
+        self.assertEqual(employee_field["string"], "Employee Name")
+        self.assertIn('widget="many2one_avatar_employee"', form_view.arch_db)
+        self.assertNotIn('<field name="employee_name"', form_view.arch_db)
+
+    def test_employee_source_requires_employee(self):
+        system = self.env["employee.access.system"].search([], limit=1)
+        with self.assertRaises(ValidationError):
+            self.env["employee.access.request"].create(
+                {"company_id": self.env.company.id, "system_id": system.id}
+            )
+
+    def test_employee_onchange_uses_employee_data(self):
+        employee = self.env["hr.employee"].create(
+            {
+                "name": "Selected Employee",
+                "work_email": "selected.employee@example.com",
+                "company_id": self.env.company.id,
+            }
+        )
+        request = self.env["employee.access.request"].new(
+            {"employee_id": employee.id, "company_id": self.env.company.id}
+        )
+        request._onchange_employee_id()
+
+        self.assertEqual(request.employee_name, employee.name)
+        self.assertEqual(request.employee_email, employee.work_email)
+        self.assertEqual(request.employee_source, "employee")
 
     def test_local_user_seed_uses_fingerprint_before_duplicate_email(self):
         Users = self.env["res.users"]
@@ -609,6 +917,7 @@ class TestEmployeeAccessRequest(TransactionCase):
             [("company_id", "=", self.env.company.id)],
             limit=1,
         )
+        companies |= facilities.company_id
         request = self.env["employee.access.request"].create(
             {
                 "employee_name": "Active User",
@@ -622,8 +931,9 @@ class TestEmployeeAccessRequest(TransactionCase):
         )
 
         self._complete_approval_flow(request)
-        request.action_start_provisioning()
-        request.action_mark_active()
+        compose_action = request.action_start_provisioning()
+        self._send_composer_action(compose_action)
+        request.with_user(request.mark_done_user_id).action_mark_active()
 
         self.assertEqual(request.state, "active")
         self.assertEqual(request.access_status, "active")
@@ -660,21 +970,22 @@ class TestEmployeeAccessRequest(TransactionCase):
             )
         )
 
-    def test_request_follows_erp_credential_vendor_ticket_flow(self):
+    def test_request_follows_erp_vendor_and_assigned_mark_done_flow(self):
         system = self.env["employee.access.system"].search(
             [("name", "=", "Odoo Standard")],
             limit=1,
         ) or self.env["employee.access.system"].search([], limit=1)
+        recipient_employee = self.env["hr.employee"].create(
+            {
+                "name": "Odoo Vendor Employee",
+                "work_email": "odoo.vendor@example.com",
+                "company_id": self.env.company.id,
+            }
+        )
         system.write(
             {
                 "owner_id": self.env.user.id,
-                "mail_recipient_ids": [
-                    Command.set(
-                        self.env["res.partner"]
-                        .create({"name": "Odoo Vendor", "email": "odoo.vendor@example.com"})
-                        .ids
-                    )
-                ],
+                "recipient_employee_ids": [Command.set(recipient_employee.ids)],
                 "vendor_portal_url": "https://support.vendor.example.com",
             }
         )
@@ -697,18 +1008,12 @@ class TestEmployeeAccessRequest(TransactionCase):
             request.approval_status_label,
             "Waiting ERP Admin Approval",
         )
-        self.assertEqual(len(request.approval_line_ids), 2)
+        self.assertEqual(len(request.approval_line_ids), 1)
         self.assertEqual(
             request.approval_line_ids.filtered(
                 lambda line: line.role == "erp_admin"
             ).state,
             "to_approve",
-        )
-        self.assertEqual(
-            request.approval_line_ids.filtered(
-                lambda line: line.role == "credential_management"
-            ).state,
-            "waiting",
         )
         with self.assertRaises(ValidationError):
             request.action_approve()
@@ -716,45 +1021,36 @@ class TestEmployeeAccessRequest(TransactionCase):
         request.with_user(request.manager_approver_id).action_manager_approve()
         request.invalidate_recordset()
 
-        self.assertEqual(request.state, "credential_approval")
-        self.assertEqual(
-            request.approval_status_label,
-            "Waiting Credential Management Approval",
-        )
+        self.assertEqual(request.state, "approved")
+        self.assertEqual(request.approval_status_label, "All Approved")
         self.assertEqual(
             request.approval_line_ids.filtered(
                 lambda line: line.role == "erp_admin"
             ).state,
             "approved",
         )
-        self.assertEqual(
-            request.approval_line_ids.filtered(
-                lambda line: line.role == "credential_management"
-            ).state,
-            "to_approve",
-        )
-
-        request.with_user(request.credential_approver_id).action_approve()
-        request.invalidate_recordset()
-
-        self.assertEqual(request.state, "approved")
         self.assertEqual(request.list_status_label, "Waiting for Vendor")
         self.assertEqual(request.approval_status_label, "All Approved")
         self.assertEqual(set(request.approval_line_ids.mapped("state")), {"approved"})
-        self.assertEqual(request.provisioning_task_ids.assigned_user_id, self.env.user)
+        self.assertEqual(
+            request.provisioning_task_ids.assigned_user_id,
+            request.mark_done_user_id,
+        )
 
         compose_action = request.action_start_provisioning()
         self.assertEqual(request.state, "provisioning")
         ticket = request.provisioning_task_ids
-        self.assertEqual(ticket.assigned_user_id, system.owner_id)
+        self.assertEqual(ticket.assigned_user_id, request.mark_done_user_id)
         self.assertEqual(ticket.ticket_reference, request.reference)
         self.assertEqual(ticket.vendor_email, "odoo.vendor@example.com")
         self.assertEqual(ticket.vendor_portal_url, system.vendor_portal_url)
         self.assertFalse(ticket.first_sent_on)
         self.assertFalse(ticket.last_vendor_message_id)
+        with self.assertRaisesRegex(ValidationError, "Send the vendor email"):
+            request.with_user(request.mark_done_user_id).action_mark_active()
         self.assertEqual(
             compose_action["context"]["default_partner_ids"],
-            system.mail_recipient_ids.ids,
+            request._get_vendor_ticket_partner_ids(),
         )
         self.assertEqual(
             compose_action["context"]["default_subject"],
@@ -762,30 +1058,41 @@ class TestEmployeeAccessRequest(TransactionCase):
         )
         self.assertEqual(
             compose_action["context"]["default_model"],
-            "employee.access.provision.task",
+            "employee.access.request",
         )
-        self.assertEqual(compose_action["context"]["default_res_ids"], ticket.ids)
+        self.assertEqual(compose_action["context"]["default_res_ids"], request.ids)
 
         self._send_composer_action(compose_action)
         ticket.invalidate_recordset()
         self.assertTrue(ticket.first_sent_on)
         self.assertTrue(ticket.last_vendor_message_id)
         self.assertEqual(
-            ticket.last_vendor_message_id.partner_ids,
-            system.mail_recipient_ids,
+            ticket.last_vendor_message_id.partner_ids.mapped("email"),
+            ["odoo.vendor@example.com"],
         )
         self.assertEqual(
             ticket.last_vendor_message_id.model,
-            "employee.access.provision.task",
+            "employee.access.request",
         )
-        self.assertEqual(ticket.last_vendor_message_id.res_id, ticket.id)
+        self.assertEqual(ticket.last_vendor_message_id.message_type, "email")
+        self.assertEqual(ticket.last_vendor_message_id.res_id, request.id)
+        self.assertIn(ticket.last_vendor_message_id, request.message_ids)
         self.assertIn(ticket.ticket_reference, ticket.vendor_subject)
         self.assertNotIn(f"({request.reference})", ticket.vendor_subject)
         self.assertTrue(
             ticket.activity_ids.filtered(
                 lambda activity: activity.summary == "Vendor provisioning required"
-                and activity.user_id == system.owner_id
+                and activity.user_id == request.mark_done_user_id
             )
+        )
+        self.assertEqual(
+            len(
+                ticket.activity_ids.filtered(
+                    lambda activity: activity.summary == "Vendor provisioning required"
+                    and activity.active
+                )
+            ),
+            1,
         )
         self.assertTrue(
             ticket.message_ids.filtered(
@@ -805,12 +1112,23 @@ class TestEmployeeAccessRequest(TransactionCase):
         ticket.invalidate_recordset()
         self.assertEqual(ticket.resend_count, 1)
         self.assertTrue(ticket.last_sent_on)
+        self.assertEqual(
+            len(
+                ticket.activity_ids.filtered(
+                    lambda activity: activity.summary == "Vendor provisioning required"
+                    and activity.active
+                )
+            ),
+            1,
+        )
         notification_logs = request.audit_log_ids.filtered(
             lambda log: log.event_type == "vendor_notification_sent"
         )
         self.assertEqual(len(notification_logs), 2)
 
-        request.action_mark_active()
+        with self.assertRaisesRegex(ValidationError, "Only .* can mark"):
+            request.with_user(self.env.ref("base.user_root")).action_mark_active()
+        request.with_user(request.mark_done_user_id).action_mark_active()
         self.assertEqual(request.state, "active")
         self.assertEqual(request.list_status_label, "Done")
         self.assertFalse(
@@ -822,15 +1140,23 @@ class TestEmployeeAccessRequest(TransactionCase):
 
     def test_vendor_ticket_email_uses_multiple_system_recipients(self):
         system = self.env["employee.access.system"].search([], limit=1)
-        recipients = self.env["res.partner"].create(
+        recipients = self.env["hr.employee"].create(
             [
-                {"name": "Vendor Support", "email": "support@example.com"},
-                {"name": "System Owner", "email": "owner@example.com"},
+                {
+                    "name": "Vendor Support",
+                    "work_email": "support@example.com",
+                    "company_id": self.env.company.id,
+                },
+                {
+                    "name": "System Owner",
+                    "work_email": "owner@example.com",
+                    "company_id": self.env.company.id,
+                },
             ]
         )
         system.write(
             {
-                "mail_recipient_ids": [Command.set(recipients.ids)],
+                "recipient_employee_ids": [Command.set(recipients.ids)],
             }
         )
         request = self.env["employee.access.request"].create(
@@ -846,15 +1172,53 @@ class TestEmployeeAccessRequest(TransactionCase):
         compose_action = request.action_start_provisioning()
 
         ticket = request.provisioning_task_ids
-        self.assertEqual(ticket.vendor_email, "support@example.com, owner@example.com")
+        self.assertEqual(
+            set(ticket.vendor_email.split(", ")),
+            {"support@example.com", "owner@example.com"},
+        )
         self._send_composer_action(compose_action)
         ticket.invalidate_recordset()
         self.assertEqual(
-            ticket.last_vendor_message_id.partner_ids,
-            recipients,
+            set(ticket.last_vendor_message_id.partner_ids.mapped("email")),
+            {"support@example.com", "owner@example.com"},
         )
 
-    def test_odoo_light_uses_hrms_admin_and_default_credential_approver(self):
+    def test_vendor_ticket_email_falls_back_to_legacy_partner_recipients(self):
+        system = self.env["employee.access.system"].search([], limit=1)
+        recipients = self.env["res.partner"].create(
+            [
+                {"name": "Legacy Vendor Support", "email": "legacy.support@example.com"},
+                {"name": "Legacy System Owner", "email": "legacy.owner@example.com"},
+            ]
+        )
+        system.write(
+            {
+                "mail_recipient_ids": [Command.set(recipients.ids)],
+                "recipient_employee_ids": [Command.clear()],
+            }
+        )
+        request = self.env["employee.access.request"].create(
+            {
+                "employee_name": "Legacy Multi Recipient User",
+                "employee_email": "legacy.multi.recipient@example.com",
+                "company_id": self.env.company.id,
+                "system_id": system.id,
+            }
+        )
+
+        self._complete_approval_flow(request)
+        compose_action = request.action_start_provisioning()
+
+        ticket = request.provisioning_task_ids
+        self.assertEqual(
+            set(ticket.vendor_email.split(", ")),
+            {"legacy.support@example.com", "legacy.owner@example.com"},
+        )
+        self._send_composer_action(compose_action)
+        ticket.invalidate_recordset()
+        self.assertEqual(ticket.last_vendor_message_id.partner_ids, recipients)
+
+    def test_odoo_light_uses_hrms_admin_and_configured_mark_done_user(self):
         system = self.env["employee.access.system"].search(
             [("name", "=", "Odoo Light")],
             limit=1,
@@ -868,10 +1232,10 @@ class TestEmployeeAccessRequest(TransactionCase):
             ],
             limit=1,
         )
-        credential_step = approval_rule.approval_step_ids.filtered(
-            lambda step: step.name == "Credential Management"
+        mark_done_step = approval_rule.approval_step_ids.filtered(
+            lambda step: step.name == "Mark Done"
         )[:1]
-        credential_step.approver_user_id = self.env.user
+        mark_done_step.approver_user_id = self.env.user
 
         request = self.env["employee.access.request"].create(
             {
@@ -884,10 +1248,9 @@ class TestEmployeeAccessRequest(TransactionCase):
 
         self.assertFalse(request.requires_erp_admin_approval)
         self.assertTrue(request.requires_hrms_admin_approval)
-        self.assertTrue(request.requires_credential_approval)
         self.assertEqual(request.approval_rule_id, approval_rule)
-        self.assertEqual(request.credential_approver_id, self.env.user)
-        self.assertEqual(len(request.approval_line_ids), 2)
+        self.assertEqual(request.mark_done_user_id, self.env.user)
+        self.assertEqual(len(request.approval_line_ids), 1)
         self.assertEqual(
             request.approval_line_ids.filtered(
                 lambda line: line.role == "hrms_admin"
@@ -1008,12 +1371,23 @@ class TestEmployeeAccessRequest(TransactionCase):
         )
         request = self.env["employee.access.request"].new(
             {
-                "employee_name": profile.employee_name,
+                "employee_id": previous_request.employee_id.id,
                 "company_id": self.env.company.id,
                 "system_id": other_system.id or system.id,
             }
         )
-        request._onchange_employee_identity()
+        profile_department = self.env["hr.department"].create(
+            {"name": profile.department, "company_id": self.env.company.id}
+        )
+        previous_request.employee_id.write(
+            {
+                "work_email": profile.employee_email,
+                "employee_access_fingerprint_id": profile.fingerprint_id,
+                "department_id": profile_department.id,
+                "job_title": profile.position,
+            }
+        )
+        request._onchange_employee_id()
 
         self.assertEqual(request.system_id, system)
         self.assertEqual(request.fingerprint_id, profile.fingerprint_id)
@@ -1127,3 +1501,74 @@ class TestEmployeeAccessRequest(TransactionCase):
         self.assertEqual(request.request_type, "update")
         request.action_submit()
         self.assertEqual(request.state, "to_approve")
+
+    def test_pending_request_blocks_duplicate_submission(self):
+        system = self.env["employee.access.system"].search([], limit=1)
+        employee = self.env["hr.employee"].create(
+            {
+                "name": "Pending Duplicate Validation User",
+                "work_email": "pending.duplicate@example.com",
+                "company_id": self.env.company.id,
+            }
+        )
+
+        for blocking_state in (
+            "to_approve",
+            "credential_approval",
+            "approved",
+            "provisioning",
+        ):
+            with self.subTest(blocking_state=blocking_state):
+                existing_request = self.env["employee.access.request"].create(
+                    {
+                        "employee_id": employee.id,
+                        "company_id": self.env.company.id,
+                        "system_id": system.id,
+                        "state": blocking_state,
+                    }
+                )
+                duplicate_request = self.env["employee.access.request"].create(
+                    {
+                        "employee_id": employee.id,
+                        "company_id": self.env.company.id,
+                        "system_id": system.id,
+                    }
+                )
+
+                with self.assertRaisesRegex(
+                    ValidationError,
+                    rf"Request {existing_request.reference} is already",
+                ):
+                    duplicate_request.action_submit()
+
+                existing_request.unlink()
+                duplicate_request.unlink()
+
+    def test_rejected_request_does_not_block_new_submission(self):
+        system = self.env["employee.access.system"].search([], limit=1)
+        employee = self.env["hr.employee"].create(
+            {
+                "name": "Rejected Duplicate Validation User",
+                "work_email": "rejected.duplicate@example.com",
+                "company_id": self.env.company.id,
+            }
+        )
+        self.env["employee.access.request"].create(
+            {
+                "employee_id": employee.id,
+                "company_id": self.env.company.id,
+                "system_id": system.id,
+                "state": "rejected",
+            }
+        )
+        new_request = self.env["employee.access.request"].create(
+            {
+                "employee_id": employee.id,
+                "company_id": self.env.company.id,
+                "system_id": system.id,
+            }
+        )
+
+        new_request.action_submit()
+
+        self.assertEqual(new_request.state, "to_approve")

@@ -16,9 +16,15 @@ class EmployeeAccessApplication(models.Model):
 
     @api.model
     def _load_sample_applications(self):
+        companies = self.env["res.company"].sudo().search([("active", "=", True)])
+        for company in companies:
+            self.with_company(company)._load_sample_applications_for_company(company)
+        return True
+
+    @api.model
+    def _load_sample_applications_for_company(self, company):
         from .access_group import APPLICATION_ROLE_GROUPS
 
-        company = self.env.company
         system_model = self.env["employee.access.system"].sudo().with_context(
             active_test=False
         )
@@ -35,12 +41,21 @@ class EmployeeAccessApplication(models.Model):
                 if not system.active:
                     system.active = True
             else:
+                system_values = {
+                    "name": system_name,
+                    "company_id": company.id,
+                    "sequence": sequence * 10,
+                }
+                if system_name == "Odoo Light":
+                    system_values.update(
+                        {"is_odoo_system": True, "user_type": "light"}
+                    )
+                elif system_name == "Odoo Standard":
+                    system_values.update(
+                        {"is_odoo_system": True, "user_type": "standard"}
+                    )
                 system = system_model.create(
-                    {
-                        "name": system_name,
-                        "company_id": company.id,
-                        "sequence": sequence * 10,
-                    }
+                    system_values
                 )
             systems_by_name[system_name] = system
 
@@ -133,10 +148,13 @@ class EmployeeAccessApplication(models.Model):
     active = fields.Boolean(default=True)
     sequence = fields.Integer(default=10)
 
-    _company_code_uniq = models.Constraint(
-        "unique(company_id, code)",
-        "Application code must be unique per company.",
-    )
+    _sql_constraints = [
+        (
+            "company_code_uniq",
+            "unique(company_id, code)",
+            "Application code must be unique per company.",
+        ),
+    ]
 
     @api.depends("name", "system_id.name")
     def _compute_display_name(self):

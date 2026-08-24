@@ -38,9 +38,8 @@ class EmployeeAccessProfile(models.Model):
         "employee_access_profile_facility_rel",
         "profile_id",
         "facility_id",
-        string="Facilities Access",
-        domain="[('company_id', '=', company_id)]",
-        check_company=True,
+        string="Access Facilities",
+        domain="[('company_id', 'in', access_company_ids), ('active', '=', True)]",
     )
     application_ids = fields.Many2many(
         "employee.access.application",
@@ -241,14 +240,15 @@ class EmployeeAccessProvisionTask(models.Model):
         self.env.cr.execute(
             """
             UPDATE mail_message message
-               SET model = 'employee.access.provision.task',
-                   res_id = task.id
+               SET model = 'employee.access.request',
+                   res_id = task.request_id,
+                   message_type = 'email'
               FROM employee_access_provision_task task
-             WHERE message.model = 'employee.access.request'
-               AND message.res_id = task.request_id
+             WHERE message.id = task.last_vendor_message_id
                AND (
-                    message.id = task.last_vendor_message_id
-                    OR message.subject = task.vendor_subject
+                    message.model != 'employee.access.request'
+                    OR message.res_id != task.request_id
+                    OR message.message_type != 'email'
                )
             """
         )
@@ -316,6 +316,11 @@ class EmployeeAccessProvisionTask(models.Model):
                 raise ValidationError(
                     "Send the vendor ticket before marking it as done."
                 )
+            if not task.first_sent_on:
+                raise ValidationError(
+                    "Send the vendor email before marking the request as done."
+                )
+            task.request_id._check_mark_done_user()
             task.write(
                 {
                     "state": "done",

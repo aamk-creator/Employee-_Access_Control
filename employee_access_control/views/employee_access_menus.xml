@@ -4,9 +4,9 @@
         <field name="name">res.company.employee.access.tree</field>
         <field name="model">res.company</field>
         <field name="arch" type="xml">
-            <list string="Companies" import="0" export_xlsx="0">
+            <tree string="Companies" import="0" export_xlsx="0">
                 <field name="name"/>
-            </list>
+            </tree>
         </field>
     </record>
 
@@ -23,7 +23,7 @@
     <record id="action_employee_access_companies" model="ir.actions.act_window">
         <field name="name">Companies</field>
         <field name="res_model">res.company</field>
-        <field name="view_mode">list,form</field>
+        <field name="view_mode">tree,form</field>
         <field name="view_id" ref="employee_access_control.view_employee_access_company_tree"/>
         <field name="search_view_id" ref="employee_access_control.view_employee_access_company_search"/>
         <field name="context">{}</field>
@@ -33,17 +33,17 @@
         <field name="name">employee.access.header.company.list</field>
         <field name="model">employee.access.header.company</field>
         <field name="arch" type="xml">
-            <list string="Header Companies" editable="bottom">
+            <tree string="Header Companies" editable="bottom">
                 <field name="sequence" widget="handle"/>
                 <field name="company_id"/>
-            </list>
+            </tree>
         </field>
     </record>
 
     <record id="action_employee_access_header_companies" model="ir.actions.act_window">
         <field name="name">Header Companies</field>
         <field name="res_model">employee.access.header.company</field>
-        <field name="view_mode">list</field>
+        <field name="view_mode">tree</field>
         <field name="view_id" ref="employee_access_control.view_employee_access_header_company_list"/>
     </record>
 
@@ -222,6 +222,7 @@
         parent="employee_access_control.menu_employee_access_requests"
         action="employee_access_control.action_employee_access_provision_task"
         sequence="30"
+        active="False"
         groups="employee_access_control.group_employee_access_administrator"
     />
 </odoo>

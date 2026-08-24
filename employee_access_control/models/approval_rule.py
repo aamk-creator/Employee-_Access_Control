@@ -108,6 +108,13 @@ class EmployeeAccessApprovalRule(models.Model):
 
     @api.model
     def _load_sample_approval_rules(self):
+        companies = self.env["res.company"].sudo().search([("active", "=", True)])
+        for company in companies:
+            self.with_company(company)._load_sample_approval_rules_for_company(company)
+        return True
+
+    @api.model
+    def _load_sample_approval_rules_for_company(self, company):
         steps_by_model = {
             "employee_access_control": [
                 (10, "Senior Manager", False, "by_field"),
@@ -117,7 +124,7 @@ class EmployeeAccessApprovalRule(models.Model):
                 (50, "EHR Admin", False, "by_user"),
                 (60, "LIMS Admin", False, "by_user"),
                 (70, "RIS Admin", False, "by_user"),
-                (80, "Credential Management", True, "by_user"),
+                (80, "Mark Done", True, "by_user"),
                 (90, "Google Workspace Admin", False, "by_user"),
             ],
             "user_handover_request": [
@@ -128,7 +135,7 @@ class EmployeeAccessApprovalRule(models.Model):
                 (50, "LIMS Admin", False, "by_user"),
                 (60, "RIS Admin", False, "by_user"),
                 (70, "Google Workspace Admin", False, "by_user"),
-                (80, "Credential Management", True, "by_user"),
+                (80, "Mark Done", True, "by_user"),
             ],
         }
         sample_rules = [
@@ -146,7 +153,7 @@ class EmployeeAccessApprovalRule(models.Model):
         for values in sample_rules:
             record = self.with_context(active_test=False).search(
                 [
-                    ("company_id", "=", self.env.company.id),
+                    ("company_id", "=", company.id),
                     ("name", "=", values["name"]),
                     ("model_name", "=", values["model_name"]),
                 ],
@@ -154,7 +161,7 @@ class EmployeeAccessApprovalRule(models.Model):
             )
             rule_values = {
                 **values,
-                "company_id": self.env.company.id,
+                "company_id": company.id,
                 "sequence": 10,
                 "active": True,
                 "approver_type": "manager",
@@ -170,12 +177,17 @@ class EmployeeAccessApprovalRule(models.Model):
                 step = record.approval_step_ids.filtered(
                     lambda approval_step: approval_step.name == name
                 )[:1]
+                legacy_step = record.approval_step_ids.filtered(
+                    lambda approval_step: approval_step.name == "Credential Management"
+                )[:1]
                 step_values = {
                     "sequence": sequence,
                     "name": name,
                     "mandatory": mandatory,
                     "approval_type": approval_type,
                 }
+                if name == "Mark Done" and not step and legacy_step.approver_user_id:
+                    step_values["approver_user_id"] = legacy_step.approver_user_id.id
                 if step:
                     step.write(step_values)
                 else:

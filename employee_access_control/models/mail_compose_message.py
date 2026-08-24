@@ -14,6 +14,10 @@ class MailComposeMessage(models.TransientModel):
         if not task:
             return mails, messages
 
+        # Render vendor correspondence as a full email card (subject + HTML body)
+        # in the access request chatter instead of as a plain comment.
+        messages.write({"message_type": "email"})
+
         now = fields.Datetime.now()
         values = {
             "last_sent_on": now,

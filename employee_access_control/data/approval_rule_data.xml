@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <odoo>
     <function model="employee.access.approval.rule" name="_load_sample_approval_rules"/>
+    <function model="employee.access.system" name="_configure_odoo_systems"/>
+    <function model="employee.access.system" name="_remove_seeded_handover_approvers"/>
     <function model="employee.access.request" name="_backfill_approval_tracking"/>
 </odoo>

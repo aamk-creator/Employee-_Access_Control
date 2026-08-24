@@ -15,8 +15,11 @@ class EmployeeAccessHeaderCompany(models.Model):
     )
     sequence = fields.Integer(default=10)
 
-    _company_uniq = models.Constraint(
-        "unique(company_id)",
-        "A company can only appear once in the header company list.",
-    )
+    _sql_constraints = [
+        (
+            "company_uniq",
+            "unique(company_id)",
+            "A company can only appear once in the header company list.",
+        ),
+    ]
 

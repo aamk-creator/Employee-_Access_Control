@@ -200,10 +200,13 @@ class EmployeeAccessGroup(models.Model):
     )
     active = fields.Boolean(default=True)
 
-    _company_code_uniq = models.Constraint(
-        "unique(company_id, code)",
-        "Access group code must be unique per company.",
-    )
+    _sql_constraints = [
+        (
+            "company_code_uniq",
+            "unique(company_id, code)",
+            "Access group code must be unique per company.",
+        ),
+    ]
 
     @api.onchange("application_id")
     def _onchange_application_id(self):
@@ -257,7 +260,13 @@ class EmployeeAccessGroup(models.Model):
 
     @api.model
     def _load_sample_groups(self):
-        company = self.env.company
+        companies = self.env["res.company"].sudo().search([("active", "=", True)])
+        for company in companies:
+            self.with_company(company)._load_sample_groups_for_company(company)
+        return True
+
+    @api.model
+    def _load_sample_groups_for_company(self, company):
         application_model = self.env["employee.access.application"].with_context(active_test=False)
         system_model = self.env["employee.access.system"].with_context(active_test=False)
         expected_codes = set()

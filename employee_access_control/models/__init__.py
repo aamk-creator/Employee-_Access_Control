@@ -4,6 +4,7 @@ from . import approval_rule
 from . import company
 from . import facility
 from . import header_company
+from . import hr_employee
 from . import mail_compose_message
 from . import provisioning
 from . import request

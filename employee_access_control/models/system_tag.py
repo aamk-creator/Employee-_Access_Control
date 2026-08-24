@@ -17,7 +17,10 @@ class EmployeeAccessSystemTag(models.Model):
     )
     active = fields.Boolean(default=True)
 
-    _company_name_uniq = models.Constraint(
-        "unique(company_id, name)",
-        "System tag name must be unique per company.",
-    )
+    _sql_constraints = [
+        (
+            "company_name_uniq",
+            "unique(company_id, name)",
+            "System tag name must be unique per company.",
+        ),
+    ]

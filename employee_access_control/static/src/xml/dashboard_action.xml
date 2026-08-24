@@ -87,7 +87,7 @@
                         <i class="fa fa-exchange" aria-hidden="true"/>
                         <strong t-esc="this.formatNumber(system.swap_users)"/>
                         <span class="eac_metric_label">Swap Available</span>
-                        <small>Licensed minus active</small>
+                        <small>Available when active users exist</small>
                     </button>
 
                     <button

@@ -20,12 +20,12 @@
         <field name="name">employee.access.system.tag.tree</field>
         <field name="model">employee.access.system.tag</field>
         <field name="arch" type="xml">
-            <list string="System Tags">
+            <tree string="System Tags">
                 <field name="name"/>
-                <field name="company_id" groups="base.group_multi_company"/>
+                <field name="company_id"/>
                 <field name="color" optional="hide"/>
                 <field name="active" widget="boolean_toggle"/>
-            </list>
+            </tree>
         </field>
     </record>
 
@@ -38,7 +38,7 @@
                     <group>
                         <group>
                             <field name="name"/>
-                            <field name="company_id" groups="base.group_multi_company"/>
+                            <field name="company_id"/>
                         </group>
                         <group>
                             <field name="color"/>
@@ -53,7 +53,7 @@
     <record id="action_employee_access_system_tag" model="ir.actions.act_window">
         <field name="name">System Tags</field>
         <field name="res_model">employee.access.system.tag</field>
-        <field name="view_mode">list,form</field>
+        <field name="view_mode">tree,form</field>
         <field name="search_view_id" ref="employee_access_control.view_employee_access_system_tag_search"/>
         <field name="context">{'search_default_filter_active': 1}</field>
         <field name="help" type="html">

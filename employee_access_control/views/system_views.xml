@@ -10,7 +10,7 @@
                 <field name="owner_id"/>
                 <field name="facility_ids"/>
                 <field name="tag_ids"/>
-                <field name="mail_recipient_ids"/>
+                <field name="recipient_employee_ids"/>
                 <filter name="filter_active" string="Active" domain="[('active', '=', True)]"/>
                 <filter name="filter_archived" string="Archived" domain="[('active', '=', False)]"/>
                 <group>
@@ -25,11 +25,11 @@
         <field name="name">employee.access.system.tree</field>
         <field name="model">employee.access.system</field>
         <field name="arch" type="xml">
-            <list string="Systems" default_order="sequence, name" import="0" export_xlsx="0">
+            <tree string="Systems" default_order="sequence, name" import="0" export_xlsx="0">
                 <field name="name" string="System Name"/>
                 <field name="total_licensed_users"/>
                 <field name="description"/>
-            </list>
+            </tree>
         </field>
     </record>
 
@@ -39,24 +39,35 @@
         <field name="arch" type="xml">
             <form string="System">
                 <sheet>
+                    <field name="image_1920" widget="image" class="oe_avatar" options="{'preview_image': 'image_1920'}"/>
+                    <div class="oe_title">
+                        <h1>
+                            <field name="name" placeholder="System Name"/>
+                        </h1>
+                    </div>
                     <group>
                         <group>
-                            <field name="name"/>
-                            <field name="company_id" groups="base.group_multi_company"/>
-                            <field name="owner_id"/>
-                        </group>
-                        <group>
-                            <field name="facility_ids" widget="many2many_tags"/>
                             <field name="tag_ids" widget="many2many_tags" options="{'color_field': 'color'}"/>
+                            <field name="is_odoo_system" widget="boolean_toggle"/>
+                            <field name="user_type"/>
+                            <field name="description"/>
+                        </group>
+                        <group>
                             <field name="total_licensed_users"/>
-                            <field name="mail_recipient_ids" widget="many2many_tags_email" placeholder="vendor@mail.com"/>
-                            <field name="sequence"/>
-                            <field name="active"/>
+                            <field name="request_approver_step_id" options="{'no_create': True, 'no_open': True}"/>
+                            <field name="handover_approver_step_id" options="{'no_create': True, 'no_open': True}"/>
+                            <field name="recipient_employee_ids" widget="many2many_tags" context="{'search_default_employees': 1}"/>
                         </group>
                     </group>
-                    <group>
-                        <field name="description"/>
-                    </group>
+                    <field name="company_id" invisible="1"/>
+                    <field name="code" invisible="1"/>
+                    <field name="owner_id" invisible="1"/>
+                    <field name="facility_ids" invisible="1"/>
+                    <field name="sequence" invisible="1"/>
+                    <field name="active" invisible="1"/>
+                    <field name="mail_recipient_ids" invisible="1"/>
+                    <field name="vendor_ticket_email" invisible="1"/>
+                    <field name="vendor_portal_url" invisible="1"/>
                 </sheet>
             </form>
         </field>
@@ -65,7 +76,7 @@
     <record id="action_employee_access_system" model="ir.actions.act_window">
         <field name="name">Systems</field>
         <field name="res_model">employee.access.system</field>
-        <field name="view_mode">list,form</field>
+        <field name="view_mode">tree,form</field>
         <field name="view_id" ref="employee_access_control.view_employee_access_system_tree"/>
         <field name="search_view_id" ref="employee_access_control.view_employee_access_system_search"/>
         <field name="context">{}</field>

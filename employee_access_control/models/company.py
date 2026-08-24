@@ -15,6 +15,14 @@ class ResCompany(models.Model):
         "Hope Healthcare Co Ltd",
     )
 
+    @api.model_create_multi
+    def create(self, vals_list):
+        companies = super().create(vals_list)
+        self.env["employee.access.facility"]._ensure_employee_access_facilities(
+            companies
+        )
+        return companies
+
     @api.model
     def _ensure_employee_access_companies(self):
         company_names = [

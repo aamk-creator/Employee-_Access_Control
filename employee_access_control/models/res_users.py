@@ -82,7 +82,7 @@ class ResUsers(models.Model):
                 "login": self._employee_access_available_login(email, fingerprint, name),
                 "company_id": company.id,
                 "company_ids": [Command.set(company.ids)],
-                "group_ids": [Command.set(self.env.ref("base.group_user").ids)],
+                "groups_id": [Command.set(self.env.ref("base.group_user").ids)],
                 "active": True,
             }
         )

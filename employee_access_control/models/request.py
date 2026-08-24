@@ -150,15 +150,23 @@ class EmployeeAccessRequest(models.Model):
         copy=False,
         default=lambda self: self.env["ir.sequence"].next_by_code("employee.access.request") or "New",
     )
-    employee_name = fields.Char(string="Employee Name", required=True)
+    employee_name = fields.Char(string="Employee Name Snapshot", required=True)
     employee_source = fields.Selection(
         [
-            ("odoo_user", "Odoo User"),
+            ("employee", "Employees Module"),
         ],
         string="Employee Source",
         required=True,
-        default="odoo_user",
+        default="employee",
         tracking=True,
+    )
+    employee_id = fields.Many2one(
+        "hr.employee",
+        string="Employee Name",
+        domain="[('company_id', '=', company_id)]",
+        check_company=True,
+        tracking=True,
+        ondelete="restrict",
     )
     requested_user_id = fields.Many2one(
         "res.users",
@@ -167,7 +175,7 @@ class EmployeeAccessRequest(models.Model):
         tracking=True,
     )
     employee_display_name = fields.Char(
-        string="Employee",
+        string="Employee Display Name",
         compute="_compute_employee_display_name",
         store=True,
         index=True,
@@ -215,9 +223,8 @@ class EmployeeAccessRequest(models.Model):
         "employee_access_request_facility_rel",
         "request_id",
         "facility_id",
-        string="Facilities Access",
-        domain="[('company_id', '=', company_id)]",
-        check_company=True,
+        string="Access Facilities",
+        domain="[('company_id', 'in', access_company_ids), ('active', '=', True)]",
     )
     application_line_ids = fields.One2many(
         "employee.access.request.application.line",
@@ -261,9 +268,16 @@ class EmployeeAccessRequest(models.Model):
     )
     credential_approver_id = fields.Many2one(
         "res.users",
-        string="Credential Management Approver",
+        string="Legacy Credential Management Approver",
         domain="[('share', '=', False), ('company_ids', 'in', company_id)]",
         tracking=True,
+    )
+    mark_done_user_id = fields.Many2one(
+        "res.users",
+        string="Mark Done User",
+        domain="[('share', '=', False), ('company_ids', 'in', company_id)]",
+        tracking=True,
+        help="The only user allowed to finish the request after the vendor email is sent.",
     )
     state = fields.Selection(
         [
@@ -332,10 +346,6 @@ class EmployeeAccessRequest(models.Model):
     )
     requires_hrms_admin_approval = fields.Boolean(
         string="HRMS Admin (Light)",
-        compute="_compute_approval_configuration",
-    )
-    requires_credential_approval = fields.Boolean(
-        string="Credential Management",
         compute="_compute_approval_configuration",
     )
     note = fields.Text(string="Request Notes")
@@ -454,7 +464,6 @@ class EmployeeAccessRequest(models.Model):
             request.requires_hrms_admin_approval = (
                 request.system_id.name == "Odoo Light"
             )
-            request.requires_credential_approval = bool(request.system_id)
 
     @api.depends(
         "employee_name",
@@ -488,12 +497,10 @@ class EmployeeAccessRequest(models.Model):
         for request in self:
             request.provisioning_task_count = len(request.provisioning_task_ids)
 
-    @api.depends("requested_user_id.name", "employee_name")
+    @api.depends("employee_id.name", "employee_name")
     def _compute_employee_display_name(self):
         for request in self:
-            request.employee_display_name = (
-                request.requested_user_id.name or request.employee_name
-            )
+            request.employee_display_name = request.employee_id.name or request.employee_name
 
     @api.depends("state", "request_date", "provisioning_task_ids.completed_on")
     def _compute_system_overview_fields(self):
@@ -524,62 +531,102 @@ class EmployeeAccessRequest(models.Model):
                     request._get_erp_admin_approver()
                     or request._fallback_approval_user()
                 )
-                request.credential_approver_id = (
-                    request._get_credential_approver()
+                request.mark_done_user_id = (
+                    request._get_mark_done_user()
                     or request._fallback_approval_user()
                 )
             request._prefill_existing_active_access(profile=profile, include_applications=False)
 
-    @api.onchange("employee_name", "employee_email", "fingerprint_id", "company_id")
-    def _onchange_employee_identity(self):
-        for request in self:
-            request._prefill_existing_active_access(
-                profile=request._find_existing_active_profile_any_system(),
-                sync_system=True,
-            )
+    def _employee_snapshot_values(self, employee):
+        return {
+            "employee_source": "employee",
+            "employee_name": employee.name,
+            "employee_email": employee.work_email or False,
+            "fingerprint_id": employee.employee_access_fingerprint_id or False,
+            "department": employee.department_id.name or False,
+            "position": employee.job_id.name or employee.job_title or False,
+            "company_id": employee.company_id.id,
+            "requested_user_id": employee.user_id.id or False,
+        }
 
-    @api.onchange("requested_user_id")
-    def _onchange_requested_user_id(self):
+    @api.model
+    def _get_or_create_employee_from_legacy_values(self, vals):
+        """Convert old API/import payloads into an Employees-module record."""
+        Employee = self.env["hr.employee"].sudo().with_context(active_test=False)
+        company = self.env["res.company"].browse(vals.get("company_id")) or self.env.company
+        user = self.env["res.users"].browse(vals.get("requested_user_id"))
+        email = vals.get("employee_email") or (user.email if user else False)
+        name = vals.get("employee_name") or (user.name if user else False)
+        fingerprint = vals.get("fingerprint_id") or (
+            user.employee_access_fingerprint_id if user else False
+        )
+        department_name = vals.get("department") or (
+            user.employee_access_department if user else False
+        )
+        position = vals.get("position") or (
+            user.employee_access_position if user else False
+        )
+        domain = [("company_id", "=", company.id)]
+        if user:
+            domain.append(("user_id", "=", user.id))
+        elif email:
+            domain.append(("work_email", "=ilike", email))
+        elif name:
+            domain.append(("name", "=", name))
+        else:
+            raise ValidationError("Select an Employee from the Employees module.")
+        employee = Employee.search(domain, order="id", limit=1)
+        if employee:
+            return employee
+        department = self.env["hr.department"]
+        if department_name:
+            department = self.env["hr.department"].sudo().search(
+                [("name", "=", department_name), ("company_id", "in", [False, company.id])],
+                limit=1,
+            )
+        employee = Employee.create(
+            {
+                "name": name,
+                "work_email": email or False,
+                "company_id": company.id,
+                "user_id": user.id or False,
+                "department_id": department.id or False,
+                "job_title": position or False,
+                "employee_access_fingerprint_id": fingerprint or False,
+            }
+        )
+        return employee
+
+    @api.onchange("employee_id")
+    def _onchange_employee_id(self):
         for request in self:
-            if request.requested_user_id:
-                request.employee_source = "odoo_user"
-                request.employee_name = request.requested_user_id.name
-                request.employee_email = (
-                    request.requested_user_id.email or request.requested_user_id.login
-                )
-                request.fingerprint_id = (
-                    request.requested_user_id.employee_access_fingerprint_id
-                )
-                request.department = (
-                    request.requested_user_id.employee_access_department
-                )
-                request.position = request.requested_user_id.employee_access_position
+            if request.employee_id:
+                for field_name, value in request._employee_snapshot_values(
+                    request.employee_id
+                ).items():
+                    setattr(request, field_name, value)
                 request._prefill_existing_active_access(
                     profile=request._find_existing_active_profile_any_system(),
                     sync_system=True,
                 )
 
+    @api.onchange("access_company_ids")
+    def _onchange_access_company_ids(self):
+        for request in self:
+            selected_company_ids = set(request.access_company_ids.ids)
+            request.access_facility_ids = request.access_facility_ids.filtered(
+                lambda facility: facility.company_id.id in selected_company_ids
+            )
+
     @api.model_create_multi
     def create(self, vals_list):
         default_system = self._default_system_id()
         for vals in vals_list:
-            requested_user = self.env["res.users"].browse(vals.get("requested_user_id"))
-            if requested_user:
-                vals["employee_source"] = "odoo_user"
-                vals["employee_name"] = requested_user.name
-                vals["employee_email"] = requested_user.email or requested_user.login
-                vals.setdefault(
-                    "fingerprint_id",
-                    requested_user.employee_access_fingerprint_id,
-                )
-                vals.setdefault(
-                    "department",
-                    requested_user.employee_access_department,
-                )
-                vals.setdefault(
-                    "position",
-                    requested_user.employee_access_position,
-                )
+            employee = self.env["hr.employee"].browse(vals.get("employee_id"))
+            if not employee:
+                employee = self._get_or_create_employee_from_legacy_values(vals)
+                vals["employee_id"] = employee.id
+            vals.update(self._employee_snapshot_values(employee))
             if "application_line_ids" not in vals:
                 system = self.env["employee.access.system"].browse(
                     vals.get("system_id")
@@ -603,27 +650,11 @@ class EmployeeAccessRequest(models.Model):
 
     def write(self, vals):
         vals = dict(vals)
-        requested_user = self.env["res.users"].browse(vals.get("requested_user_id"))
-        if requested_user:
-            vals.update(
-                {
-                    "employee_source": "odoo_user",
-                    "employee_name": requested_user.name,
-                    "employee_email": requested_user.email or requested_user.login,
-                }
-            )
-            vals.setdefault(
-                "fingerprint_id",
-                requested_user.employee_access_fingerprint_id,
-            )
-            vals.setdefault(
-                "department",
-                requested_user.employee_access_department,
-            )
-            vals.setdefault(
-                "position",
-                requested_user.employee_access_position,
-            )
+        if "employee_id" in vals:
+            employee = self.env["hr.employee"].browse(vals["employee_id"])
+            if not employee:
+                raise ValidationError("Select an Employee from the Employees module.")
+            vals.update(self._employee_snapshot_values(employee))
         if "system_id" in vals and "application_line_ids" not in vals:
             system = self.env["employee.access.system"].browse(vals["system_id"])
             vals["application_line_ids"] = [
@@ -644,19 +675,26 @@ class EmployeeAccessRequest(models.Model):
         if "system_id" in vals:
             for request in self.filtered(lambda item: item.state == "draft"):
                 request._initialize_draft_approvers(force_system_approver=True)
-        if "requested_user_id" in vals or "employee_email" in vals:
+        if "employee_id" in vals or "requested_user_id" in vals or "employee_email" in vals:
             self._subscribe_related_users()
         return result
 
-    @api.constrains("employee_source", "requested_user_id")
+    @api.constrains("employee_id")
     def _check_employee_source(self):
         for request in self:
-            if (
-                request.employee_source == "odoo_user"
-                and not request.requested_user_id
-                and not self.env.context.get("employee_access_allow_unlinked_user")
-            ):
-                raise ValidationError("Select an Odoo User for the employee source.")
+            if not request.employee_id:
+                raise ValidationError("Select an Employee from the Employees module.")
+
+    @api.constrains("access_company_ids", "access_facility_ids")
+    def _check_access_facility_companies(self):
+        for request in self:
+            invalid_facilities = request.access_facility_ids.filtered(
+                lambda facility: facility.company_id not in request.access_company_ids
+            )
+            if invalid_facilities:
+                raise ValidationError(
+                    "Every access facility must belong to a selected access company."
+                )
 
     @api.constrains("system_id", "application_line_ids")
     def _check_application_system(self):
@@ -673,41 +711,36 @@ class EmployeeAccessRequest(models.Model):
         self.env.cr.execute(
             """
             UPDATE employee_access_request
-               SET employee_source = 'odoo_user'
-             WHERE requested_user_id IS NOT NULL
-               AND employee_source != 'odoo_user'
+               SET employee_source = 'employee'
+             WHERE employee_source IS NULL OR employee_source != 'employee'
             """
         )
 
     @api.model
-    def _migrate_manual_employees_to_odoo_users(self):
-        requests = self.sudo().with_context(active_test=False).search(
-            ["|", ("requested_user_id", "=", False), ("employee_source", "!=", "odoo_user")],
-            order="id",
-        )
-        Users = self.env["res.users"]
-        for request in requests:
-            user = Users._employee_access_get_or_create(
-                name=request.employee_name,
-                fingerprint=request.fingerprint_id,
-                email=request.employee_email,
-                department=request.department,
-                position=request.position,
-                company=request.company_id,
-            )
-            super(
-                EmployeeAccessRequest,
-                request.with_context(tracking_disable=True),
-            ).write(
+    def _normalize_employee_sources(self):
+        self.init()
+        for request in self.sudo().with_context(active_test=False).search(
+            [("employee_id", "=", False)], order="id"
+        ):
+            employee = request._get_or_create_employee_from_legacy_values(
                 {
-                    "employee_source": "odoo_user",
-                    "requested_user_id": user.id,
+                    "requested_user_id": request.requested_user_id.id,
+                    "employee_name": request.employee_name,
+                    "employee_email": request.employee_email,
+                    "fingerprint_id": request.fingerprint_id,
+                    "department": request.department,
+                    "position": request.position,
+                    "company_id": request.company_id.id,
                 }
+            )
+            super(EmployeeAccessRequest, request.with_context(tracking_disable=True)).write(
+                {"employee_id": employee.id, **request._employee_snapshot_values(employee)}
             )
         return True
 
     def action_submit(self):
         self._normalize_request_type_from_existing_access()
+        self._validate_no_pending_duplicate_requests()
         self._validate_duplicate_create_requests()
         if any(not request.application_ids for request in self):
             raise ValidationError(
@@ -719,23 +752,22 @@ class EmployeeAccessRequest(models.Model):
                 or request._get_erp_admin_approver()
                 or request._fallback_approval_user()
             )
-            credential_approver = (
-                request.credential_approver_id
-                or request._get_credential_approver()
+            mark_done_user = (
+                request.mark_done_user_id
+                or request._get_mark_done_user()
+                or request.credential_approver_id
                 or request._fallback_approval_user()
             )
             request.write(
                 {
                     "state": "to_approve",
                     "manager_approver_id": erp_approver.id,
-                    "credential_approver_id": credential_approver.id,
+                    "mark_done_user_id": mark_done_user.id,
                 }
             )
             request._set_approval_lines(
                 erp_approver,
-                credential_approver,
                 erp_state="to_approve",
-                credential_state="waiting",
             )
             request._schedule_approval_activity(
                 erp_approver,
@@ -766,43 +798,40 @@ class EmployeeAccessRequest(models.Model):
                 request._system_approval_role(),
                 "approved",
             )
-            request._mark_approval_line("credential_management", "to_approve")
-            request.write({"state": "credential_approval"})
-            request._schedule_approval_activity(
-                request.credential_approver_id,
-                "Credential Management approval required",
-            )
-            request._log_event(
-                "manager_approved",
-                f"{approver_label} Approval completed by {self.env.user.name}.",
-            )
-
-    def action_approve(self):
-        for request in self:
-            if request.state != "credential_approval":
-                raise ValidationError(
-                    "Only requests awaiting Credential Management Approval can be approved."
-                )
-            request._check_assigned_approver(
-                request.credential_approver_id,
-                "Credential Management",
-            )
-            request._ensure_approval_lines()
-            request._complete_approval_activity(
-                "Credential Management approval required"
-            )
-            request._mark_approval_line("credential_management", "approved")
             profile = request._get_or_create_profile()
             task = request._create_provisioning_task(profile)
             request.write({"state": "approved", "profile_id": profile.id})
             request._log_event(
-                "credential_approved",
-                f"Credential Management Approval completed by {self.env.user.name}.",
+                "manager_approved",
+                f"{approver_label} Approval completed by {self.env.user.name}.",
                 profile=profile,
             )
             request._log_event(
                 "approved",
-                "All approvals completed. Request is waiting for the vendor.",
+                "System administrator approval completed. Request is waiting to be sent to the vendor.",
+                profile=profile,
+            )
+            request._log_event(
+                "task_created",
+                "Provisioning task created for this request.",
+                profile=profile,
+                task=task,
+            )
+
+    def action_approve(self):
+        """Complete legacy records that were already in the removed credential step."""
+        for request in self:
+            if request.state != "credential_approval":
+                raise ValidationError(
+                    "This request is not in the legacy approval step."
+                )
+            request._ensure_approval_lines()
+            profile = request._get_or_create_profile()
+            task = request._create_provisioning_task(profile)
+            request.write({"state": "approved", "profile_id": profile.id})
+            request._log_event(
+                "approved",
+                "Removed Credential Management step skipped. Request is ready for the vendor.",
                 profile=profile,
             )
             request._log_event(
@@ -819,8 +848,6 @@ class EmployeeAccessRequest(models.Model):
                     request._system_approval_role(),
                     "rejected",
                 )
-            elif request.state == "credential_approval":
-                request._mark_approval_line("credential_management", "rejected")
             request.write({"state": "rejected"})
             request._log_event("rejected", "Request rejected.")
 
@@ -871,6 +898,7 @@ class EmployeeAccessRequest(models.Model):
             )[:1]
             if not task:
                 raise ValidationError("No vendor ticket is currently in progress.")
+            request._check_mark_done_user()
             task.action_mark_done()
 
     def action_mark_inactive(self):
@@ -1029,11 +1057,11 @@ class EmployeeAccessRequest(models.Model):
             self.manager_approver_id = (
                 self._get_erp_admin_approver() or self._fallback_approval_user()
             )
-            self.credential_approver_id = (
-                self._get_credential_approver() or self._fallback_approval_user()
+            self.mark_done_user_id = (
+                self._get_mark_done_user() or self._fallback_approval_user()
             )
 
-        if sync_system:
+        if sync_system and not self.employee_id:
             self.employee_name = profile.employee_name
             self.fingerprint_id = profile.fingerprint_id
             self.employee_email = profile.employee_email
@@ -1064,6 +1092,36 @@ class EmployeeAccessRequest(models.Model):
                     "Active access already exists for this employee. Use Update instead of Create."
                 )
 
+    def _validate_no_pending_duplicate_requests(self):
+        blocking_states = (
+            "to_approve",
+            "credential_approval",
+            "approved",
+            "provisioning",
+        )
+        for request in self:
+            if not request.employee_id or not request.company_id or not request.system_id:
+                continue
+            existing_request = self.search(
+                [
+                    ("id", "!=", request.id),
+                    ("employee_id", "=", request.employee_id.id),
+                    ("company_id", "=", request.company_id.id),
+                    ("system_id", "=", request.system_id.id),
+                    ("state", "in", blocking_states),
+                ],
+                order="request_date desc, id desc",
+                limit=1,
+            )
+            if existing_request:
+                status = existing_request.list_status_label or dict(
+                    self._fields["state"].selection
+                ).get(existing_request.state, existing_request.state)
+                raise ValidationError(
+                    f"Request {existing_request.reference} is already {status}. "
+                    "Complete or reject the existing request before submitting another request."
+                )
+
     def _create_provisioning_task(self, profile):
         self.ensure_one()
         existing_task = self.provisioning_task_ids.filtered(
@@ -1075,25 +1133,70 @@ class EmployeeAccessRequest(models.Model):
             {
                 "request_id": self.id,
                 "profile_id": profile.id,
-                "assigned_user_id": self._get_vendor_owner().id,
+                "assigned_user_id": self._get_mark_done_user_for_request().id,
             }
         )
 
     def _get_vendor_owner(self):
         self.ensure_one()
+        return self._get_mark_done_user_for_request()
+
+    def _get_mark_done_user_for_request(self):
+        self.ensure_one()
         return (
-            self.system_id.owner_id
+            self.mark_done_user_id
+            or self._get_mark_done_user()
+            or self.credential_approver_id
+            or self.system_id.owner_id
             or self.manager_approver_id
             or self._fallback_approval_user()
         )
+
+    def _get_vendor_ticket_partner_ids(self):
+        self.ensure_one()
+        employee_recipients = self.system_id.recipient_employee_ids
+        if not employee_recipients:
+            return self.system_id.mail_recipient_ids.ids
+
+        partners = self.env["res.partner"].sudo()
+        for employee in employee_recipients:
+            email = (employee.work_email or "").strip()
+            if not email:
+                continue
+            partner = False
+            if "work_contact_id" in employee._fields:
+                partner = employee.work_contact_id
+            if not partner:
+                partner = partners.search([("email", "=ilike", email)], limit=1)
+            if not partner:
+                partner = partners.create(
+                    {
+                        "name": employee.name,
+                        "email": email,
+                        "company_id": employee.company_id.id or False,
+                    }
+                )
+            partners |= partner
+        if not partners:
+            raise ValidationError(
+                "Selected recipient employees do not have work emails. "
+                "Add employee work emails before sending the vendor email."
+            )
+        return partners.ids
 
     def _get_vendor_ticket_recipients(self):
         self.ensure_one()
         recipient_emails = [
             email.strip()
-            for email in self.system_id.mail_recipient_ids.mapped("email")
+            for email in self.system_id.recipient_employee_ids.mapped("work_email")
             if email and email.strip()
         ]
+        if not recipient_emails:
+            recipient_emails = [
+                email.strip()
+                for email in self.system_id.mail_recipient_ids.mapped("email")
+                if email and email.strip()
+            ]
         recipient_emails = list(dict.fromkeys(recipient_emails))
         if not recipient_emails:
             raise ValidationError(
@@ -1196,10 +1299,10 @@ class EmployeeAccessRequest(models.Model):
             "view_id": compose_form.id,
             "target": "new",
             "context": {
-                "default_model": task._name,
-                "default_res_ids": task.ids,
+                "default_model": self._name,
+                "default_res_ids": self.ids,
                 "default_composition_mode": "comment",
-                "default_partner_ids": self.system_id.mail_recipient_ids.ids,
+                "default_partner_ids": self._get_vendor_ticket_partner_ids(),
                 "default_subject": subject,
                 "default_body": self._vendor_ticket_body(task, resend=resend),
                 "default_email_layout_xmlid": "mail.mail_notification_layout",
@@ -1243,19 +1346,32 @@ class EmployeeAccessRequest(models.Model):
 
     def _get_erp_admin_approver(self):
         self.ensure_one()
+        configured_step = self.system_id.request_approver_step_id
+        if configured_step.approver_user_id:
+            return configured_step.approver_user_id
         approval_rule = self._get_access_approval_rule()
         erp_step = approval_rule.approval_step_ids.filtered(
             lambda step: step.name == self._erp_admin_step_name()
         )[:1]
         return erp_step.approver_user_id or approval_rule.approver_user_id
 
-    def _get_credential_approver(self):
+    def _get_mark_done_user(self):
         self.ensure_one()
+        configured_step = self.system_id.handover_approver_step_id
+        if configured_step.approver_user_id:
+            return configured_step.approver_user_id
         approval_rule = self._get_access_approval_rule()
-        credential_step = approval_rule.approval_step_ids.filtered(
+        mark_done_step = approval_rule.approval_step_ids.filtered(
+            lambda step: step.name == "Mark Done"
+        )[:1]
+        legacy_step = approval_rule.approval_step_ids.filtered(
             lambda step: step.name == "Credential Management"
         )[:1]
-        return credential_step.approver_user_id or approval_rule.approver_user_id
+        return (
+            mark_done_step.approver_user_id
+            or legacy_step.approver_user_id
+            or approval_rule.approver_user_id
+        )
 
     def _fallback_approval_user(self):
         self.ensure_one()
@@ -1274,30 +1390,27 @@ class EmployeeAccessRequest(models.Model):
             if force_system_approver
             else self.manager_approver_id or configured_system_approver
         )
-        credential_approver = (
-            self.credential_approver_id
-            or self._get_credential_approver()
+        mark_done_user = (
+            self.mark_done_user_id
+            or self._get_mark_done_user()
+            or self.credential_approver_id
             or self._fallback_approval_user()
         )
         super(EmployeeAccessRequest, self).write(
             {
                 "manager_approver_id": system_approver.id,
-                "credential_approver_id": credential_approver.id,
+                "mark_done_user_id": mark_done_user.id,
             }
         )
         self._set_approval_lines(
             system_approver,
-            credential_approver,
             erp_state="waiting",
-            credential_state="waiting",
         )
 
     def _set_approval_lines(
         self,
         erp_approver,
-        credential_approver,
         erp_state,
-        credential_state,
     ):
         self.ensure_one()
         system_role = self._system_approval_role()
@@ -1307,17 +1420,15 @@ class EmployeeAccessRequest(models.Model):
                 "approver_user_id": erp_approver.id,
                 "state": erp_state,
             },
-            "credential_management": {
-                "sequence": 20,
-                "approver_user_id": credential_approver.id,
-                "state": credential_state,
-            },
         }
-        obsolete_system_lines = self.approval_line_ids.filtered(
-            lambda approval_line: approval_line.role in ("erp_admin", "hrms_admin")
-            and approval_line.role != system_role
+        obsolete_lines = self.approval_line_ids.filtered(
+            lambda approval_line: approval_line.role == "credential_management"
+            or (
+                approval_line.role in ("erp_admin", "hrms_admin")
+                and approval_line.role != system_role
+            )
         )
-        obsolete_system_lines.unlink()
+        obsolete_lines.unlink()
         for role, values in values_by_role.items():
             line = self.approval_line_ids.filtered(
                 lambda approval_line: approval_line.role == role
@@ -1336,28 +1447,21 @@ class EmployeeAccessRequest(models.Model):
             or self._get_erp_admin_approver()
             or self._fallback_approval_user()
         )
-        credential_approver = (
-            self.credential_approver_id
-            or self._get_credential_approver()
-            or self._fallback_approval_user()
-        )
         state_by_request_state = {
-            "to_approve": ("to_approve", "waiting"),
-            "credential_approval": ("approved", "to_approve"),
-            "approved": ("approved", "approved"),
-            "provisioning": ("approved", "approved"),
-            "active": ("approved", "approved"),
-            "inactive": ("approved", "approved"),
+            "to_approve": "to_approve",
+            "credential_approval": "approved",
+            "approved": "approved",
+            "provisioning": "approved",
+            "active": "approved",
+            "inactive": "approved",
         }
-        erp_state, credential_state = state_by_request_state.get(
+        erp_state = state_by_request_state.get(
             self.state,
-            ("waiting", "waiting"),
+            "waiting",
         )
         self._set_approval_lines(
             erp_approver,
-            credential_approver,
             erp_state,
-            credential_state,
         )
 
     def _mark_approval_line(self, role, state):
@@ -1401,18 +1505,21 @@ class EmployeeAccessRequest(models.Model):
                 or request._get_erp_admin_approver()
                 or request._fallback_approval_user()
             )
-            credential_approver = (
-                request.credential_approver_id
-                or request._get_credential_approver()
+            mark_done_user = (
+                request.mark_done_user_id
+                or request._get_mark_done_user()
+                or request.credential_approver_id
                 or request._fallback_approval_user()
             )
             request.write(
                 {
                     "manager_approver_id": erp_approver.id,
-                    "credential_approver_id": credential_approver.id,
+                    "mark_done_user_id": mark_done_user.id,
                 }
             )
             request._ensure_approval_lines()
+            if request.state == "credential_approval":
+                request.action_approve()
         return True
 
     def _schedule_approval_activity(self, user, summary):
@@ -1429,15 +1536,24 @@ class EmployeeAccessRequest(models.Model):
         self.ensure_one()
         vendor_owner = task.assigned_user_id or self._get_vendor_owner()
         summary = "Vendor provisioning required"
-        task.activity_schedule(
-            "mail.mail_activity_data_todo",
-            user_id=vendor_owner.id,
-            summary=summary,
-            note=(
-                f"Please complete vendor provisioning for {self.employee_name} "
-                f"({self.reference}) in {self.system_id.name}."
-            ),
+        note = (
+            f"Please complete vendor provisioning for {self.employee_name} "
+            f"({self.reference}) in {self.system_id.name}."
         )
+        existing_activity = task.activity_ids.filtered(
+            lambda activity: activity.active
+            and activity.summary == summary
+            and activity.user_id == vendor_owner
+        )[:1]
+        if existing_activity:
+            existing_activity.write({"note": note})
+        else:
+            task.activity_schedule(
+                "mail.mail_activity_data_todo",
+                user_id=vendor_owner.id,
+                summary=summary,
+                note=note,
+            )
         message = (
             f"Admin notification resent to {vendor_owner.name}."
             if resend
@@ -1476,18 +1592,17 @@ class EmployeeAccessRequest(models.Model):
                 f"Only {assigned_user.name} can complete {approval_label} Approval."
             )
 
+    def _check_mark_done_user(self):
+        self.ensure_one()
+        assigned_user = self._get_mark_done_user_for_request()
+        if assigned_user != self.env.user:
+            raise ValidationError(
+                f"Only {assigned_user.name} can mark this request as done."
+            )
+
     def _subscribe_related_users(self):
         for request in self:
-            related_user = request.requested_user_id
-            if not related_user and request.employee_email:
-                related_user = self.env["res.users"].search(
-                    [
-                        "|",
-                        ("email", "=ilike", request.employee_email),
-                        ("login", "=ilike", request.employee_email),
-                    ],
-                    limit=1,
-                )
+            related_user = request.employee_id.user_id or request.requested_user_id
             if related_user.partner_id:
                 request.message_subscribe(partner_ids=related_user.partner_id.ids)
 
@@ -1504,7 +1619,7 @@ class EmployeeAccessRequest(models.Model):
                 "performed_by_id": self.env.user.id,
             }
         )
-        partner_ids = self.requested_user_id.partner_id.ids
+        partner_ids = (self.employee_id.user_id or self.requested_user_id).partner_id.ids
         self.message_post(
             body=message,
             subtype_xmlid="mail.mt_note",
@@ -1564,10 +1679,13 @@ class EmployeeAccessRequestApprovalLine(models.Model):
     )
     approved_on = fields.Datetime(readonly=True)
 
-    _request_role_uniq = models.Constraint(
-        "unique(request_id, role)",
-        "Each approval role can appear only once per request.",
-    )
+    _sql_constraints = [
+        (
+            "request_role_uniq",
+            "unique(request_id, role)",
+            "Each approval role can appear only once per request.",
+        ),
+    ]
 
 
 class EmployeeAccessRequestApplicationLine(models.Model):
@@ -1602,7 +1720,10 @@ class EmployeeAccessRequestApplicationLine(models.Model):
             if line.access_group_id and line.access_group_id.application_id != line.application_id:
                 raise ValidationError("Access role must belong to the selected application.")
 
-    _request_application_uniq = models.Constraint(
-        "unique(request_id, application_id)",
-        "Each application module can appear only once per request.",
-    )
+    _sql_constraints = [
+        (
+            "request_application_uniq",
+            "unique(request_id, application_id)",
+            "Each application module can appear only once per request.",
+        ),
+    ]
