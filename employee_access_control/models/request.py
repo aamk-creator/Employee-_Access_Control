@@ -35,7 +35,18 @@ class EmployeeAccessRequest(models.Model):
 
     @api.model
     def _application_line_commands(self, system, profile=None):
+        is_light_to_standard_upgrade = self._is_light_to_standard_upgrade(
+            profile, system
+        )
         existing_application_ids = set(profile.application_ids.ids) if profile else set()
+        existing_application_names = (
+            {
+                self._normalized_access_name(application.name)
+                for application in profile.application_ids
+            }
+            if is_light_to_standard_upgrade
+            else set()
+        )
         previous_lines_by_application = {}
         if profile and profile.last_request_id.system_id == system:
             previous_lines_by_application = {
@@ -43,23 +54,76 @@ class EmployeeAccessRequest(models.Model):
                 for line in profile.last_request_id.application_line_ids
                 if not line.remove_access
             }
+        previous_lines_by_application_name = {}
+        if is_light_to_standard_upgrade and profile.last_request_id:
+            previous_lines_by_application_name = {
+                self._normalized_access_name(line.application_id.name): line
+                for line in profile.last_request_id.application_line_ids
+                if not line.remove_access
+                and line.application_id in profile.application_ids
+            }
 
-        return [
-            Command.create(
-                {
-                    "application_id": application.id,
-                    "access_group_id": self._existing_or_default_access_group(
-                        application,
-                        previous_lines_by_application.get(application.id),
-                        use_default=not profile or application.id in existing_application_ids,
-                    ).id,
-                    "remove_access": bool(
-                        profile and application.id not in existing_application_ids
-                    ),
-                }
+        commands = []
+        for application in self._applications_for_system(system):
+            if is_light_to_standard_upgrade:
+                application_name = self._normalized_access_name(application.name)
+                has_existing_access = application_name in existing_application_names
+                access_group = self._matching_upgrade_access_group(
+                    application,
+                    previous_lines_by_application_name.get(application_name),
+                )
+            else:
+                has_existing_access = (
+                    not profile or application.id in existing_application_ids
+                )
+                access_group = self._existing_or_default_access_group(
+                    application,
+                    previous_lines_by_application.get(application.id),
+                    use_default=has_existing_access,
+                )
+
+            commands.append(
+                Command.create(
+                    {
+                        "application_id": application.id,
+                        "access_group_id": access_group.id,
+                        "remove_access": bool(profile and not has_existing_access),
+                    }
+                )
             )
-            for application in self._applications_for_system(system)
-        ]
+        return commands
+
+    @api.model
+    def _normalized_access_name(self, name):
+        return (name or "").strip().casefold()
+
+    @api.model
+    def _is_light_to_standard_upgrade(self, profile, target_system):
+        return bool(
+            profile
+            and target_system
+            and profile.system_id.user_type == "light"
+            and target_system.user_type == "standard"
+        )
+
+    @api.model
+    def _matching_upgrade_access_group(self, application, previous_line):
+        if not previous_line or not previous_line.access_group_id:
+            return self.env["employee.access.group"]
+        source_role_name = self._normalized_access_name(
+            previous_line.access_group_id.name
+        )
+        return self.env["employee.access.group"].search(
+            [
+                ("application_id", "=", application.id),
+                ("display_type", "=", "application_role"),
+                ("active", "=", True),
+            ],
+            order="sequence, name, id",
+        ).filtered(
+            lambda group: self._normalized_access_name(group.name)
+            == source_role_name
+        )[:1]
 
     @api.model
     def _existing_or_default_access_group(
@@ -474,7 +538,7 @@ class EmployeeAccessRequest(models.Model):
     )
     def _compute_existing_access_status(self):
         for request in self:
-            profile = request._find_existing_active_profile()
+            profile = request._find_existing_active_profile_for_target()
             request.has_existing_active_access = bool(profile)
             request.duplicate_create_blocked = bool(profile)
             if not profile:
@@ -521,7 +585,7 @@ class EmployeeAccessRequest(models.Model):
     @api.onchange("system_id")
     def _onchange_system_id(self):
         for request in self:
-            profile = request._find_existing_active_profile()
+            profile = request._find_existing_active_profile_for_target()
             request.application_line_ids = [
                 Command.clear(),
                 *self._application_line_commands(request.system_id, profile=profile),
@@ -657,9 +721,19 @@ class EmployeeAccessRequest(models.Model):
             vals.update(self._employee_snapshot_values(employee))
         if "system_id" in vals and "application_line_ids" not in vals:
             system = self.env["employee.access.system"].browse(vals["system_id"])
+            source_profile = (
+                self._find_existing_active_profile()
+                if len(self) == 1
+                else self.env["employee.access.profile"]
+            )
+            profile = (
+                source_profile
+                if self._is_light_to_standard_upgrade(source_profile, system)
+                else None
+            )
             vals["application_line_ids"] = [
                 Command.clear(),
-                *self._application_line_commands(system),
+                *self._application_line_commands(system, profile=profile),
             ]
         elif "application_line_ids" in vals and len(self) == 1:
             vals = dict(vals)
@@ -984,6 +1058,18 @@ class EmployeeAccessRequest(models.Model):
             limit=1,
         )
 
+    def _find_existing_active_profile_for_target(self):
+        self.ensure_one()
+        profile = self._find_existing_active_profile()
+        if profile or not self.system_id or self.system_id.user_type != "standard":
+            return profile
+        return self.env["employee.access.profile"].search(
+            self._matching_profile_domain()
+            + [("system_id.user_type", "=", "light")],
+            order="id desc",
+            limit=1,
+        )
+
     def _find_existing_active_profile_any_system(self):
         self.ensure_one()
         if not self.company_id:
@@ -996,7 +1082,7 @@ class EmployeeAccessRequest(models.Model):
 
     def _get_or_create_profile(self):
         self.ensure_one()
-        profile = self.profile_id or self._find_existing_active_profile()
+        profile = self.profile_id or self._find_existing_active_profile_for_target()
         if not profile:
             profile = self.env["employee.access.profile"].create(
                 {
@@ -1038,7 +1124,7 @@ class EmployeeAccessRequest(models.Model):
 
     def _sync_request_type_with_existing_access(self):
         self.ensure_one()
-        if self._find_existing_active_profile():
+        if self._find_existing_active_profile_for_target():
             self.request_type = "update"
         elif self.request_type != "create":
             self.request_type = "create"
@@ -1081,13 +1167,20 @@ class EmployeeAccessRequest(models.Model):
         for request in self:
             if request.state != "draft":
                 continue
-            target_request_type = "update" if request._find_existing_active_profile() else "create"
+            target_request_type = (
+                "update"
+                if request._find_existing_active_profile_for_target()
+                else "create"
+            )
             if request.request_type != target_request_type:
                 super(EmployeeAccessRequest, request).write({"request_type": target_request_type})
 
     def _validate_duplicate_create_requests(self):
         for request in self:
-            if request.request_type == "create" and request._find_existing_active_profile():
+            if (
+                request.request_type == "create"
+                and request._find_existing_active_profile_for_target()
+            ):
                 raise ValidationError(
                     "Active access already exists for this employee. Use Update instead of Create."
                 )

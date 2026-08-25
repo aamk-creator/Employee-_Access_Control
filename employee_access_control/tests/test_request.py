@@ -1406,7 +1406,7 @@ class TestEmployeeAccessRequest(TransactionCase):
         self.assertTrue(all(unselected_lines.mapped("remove_access")))
         self.assertFalse(any(unselected_lines.mapped("access_group_id")))
 
-    def test_light_to_standard_access_defaults_to_create_request_type(self):
+    def test_light_to_standard_access_defaults_to_update_request_type(self):
         systems = self.env["employee.access.system"].search(
             [("name", "in", ["Odoo Light", "Odoo Standard"])],
             order="name asc",
@@ -1436,8 +1436,116 @@ class TestEmployeeAccessRequest(TransactionCase):
         )
         request._onchange_system_id()
 
-        self.assertEqual(request.request_type, "create")
-        self.assertFalse(request.duplicate_create_blocked)
+        self.assertEqual(request.request_type, "update")
+        self.assertTrue(request.duplicate_create_blocked)
+
+    def test_light_to_standard_upgrade_carries_matching_application_roles(self):
+        systems = self.env["employee.access.system"].search(
+            [("name", "in", ["Odoo Light", "Odoo Standard"])],
+            order="name asc",
+        )
+        light_system = systems.filtered(lambda system: system.name == "Odoo Light")[:1]
+        standard_system = systems.filtered(
+            lambda system: system.name == "Odoo Standard"
+        )[:1]
+        light_application = self.env["employee.access.application"].search(
+            [
+                ("system_id", "=", light_system.id),
+                ("active", "=", True),
+            ],
+            order="sequence, name",
+            limit=1,
+        )
+        standard_application = self.env["employee.access.application"].search(
+            [
+                ("system_id", "=", standard_system.id),
+                ("name", "=", light_application.name),
+                ("active", "=", True),
+            ],
+            limit=1,
+        )
+        self.assertTrue(standard_application)
+        light_role = self.env["employee.access.group"].search(
+            [
+                ("application_id", "=", light_application.id),
+                ("display_type", "=", "application_role"),
+                ("active", "=", True),
+            ],
+            order="sequence, name",
+            limit=1,
+        )
+        standard_role = self.env["employee.access.group"].search(
+            [
+                ("application_id", "=", standard_application.id),
+                ("name", "=", light_role.name),
+                ("display_type", "=", "application_role"),
+                ("active", "=", True),
+            ],
+            limit=1,
+        )
+        self.assertTrue(standard_role)
+        previous_request = self.env["employee.access.request"].create(
+            {
+                "employee_name": "Upgrade Role User",
+                "employee_email": "upgrade-role@example.com",
+                "company_id": self.env.company.id,
+                "system_id": light_system.id,
+                "application_line_ids": [
+                    Command.create(
+                        {
+                            "application_id": light_application.id,
+                            "access_group_id": light_role.id,
+                        }
+                    )
+                ],
+            }
+        )
+        profile = self.env["employee.access.profile"].create(
+            {
+                "employee_name": previous_request.employee_name,
+                "employee_email": previous_request.employee_email,
+                "company_id": self.env.company.id,
+                "system_id": light_system.id,
+                "application_ids": [Command.set(light_application.ids)],
+                "last_request_id": previous_request.id,
+                "state": "active",
+            }
+        )
+        request = self.env["employee.access.request"].new(
+            {
+                "employee_name": previous_request.employee_name,
+                "employee_email": previous_request.employee_email,
+                "company_id": self.env.company.id,
+                "system_id": standard_system.id,
+            }
+        )
+
+        request._onchange_system_id()
+
+        carried_line = request.application_line_ids.filtered(
+            lambda line: line.application_id == standard_application
+        )
+        self.assertEqual(request.request_type, "update")
+        self.assertEqual(carried_line.access_group_id, standard_role)
+        self.assertFalse(carried_line.remove_access)
+        standard_only_lines = request.application_line_ids.filtered(
+            lambda line: line.application_id.name
+            not in profile.application_ids.mapped("name")
+        )
+        self.assertTrue(standard_only_lines)
+        self.assertTrue(all(standard_only_lines.mapped("remove_access")))
+        self.assertFalse(any(standard_only_lines.mapped("access_group_id")))
+
+        request_record = self.env["employee.access.request"].create(
+            {
+                "employee_name": previous_request.employee_name,
+                "employee_email": previous_request.employee_email,
+                "company_id": self.env.company.id,
+                "system_id": standard_system.id,
+            }
+        )
+        self.assertEqual(request_record.request_type, "update")
+        self.assertEqual(request_record._get_or_create_profile(), profile)
 
     def test_standard_to_light_access_defaults_to_create_request_type(self):
         systems = self.env["employee.access.system"].search(
