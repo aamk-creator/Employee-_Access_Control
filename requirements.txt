@@ -1,4 +1,0 @@
-# Odoo.sh reads this file during build.
-# This repository does not require extra pip packages beyond the standard Odoo runtime.
-# Keep this file comment-only unless the custom addon imports a real third-party library.
-# Do not add core Odoo dependencies here (for example: odoo, psycopg2, werkzeug, markupsafe).
