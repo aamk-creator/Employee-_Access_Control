@@ -259,22 +259,27 @@ class EmployeeAccessSystem(models.Model):
                 else 0
             )
             licensed_users = system.total_licensed_users if system else 0
+            assigned_users = active_users + inactive_users
+            usable_users = max(licensed_users - assigned_users, 0)
+            additional_licenses_required = max(
+                assigned_users - licensed_users, 0
+            )
             utilization_percent = (
-                round(active_users * 100 / licensed_users) if licensed_users else 0
+                round(assigned_users * 100 / licensed_users)
+                if licensed_users
+                else 0
             )
             dashboard_rows.append(
                 {
                     "id": system.id if system else False,
                     "name": system_name,
                     "licensed_users": licensed_users,
-                    "need_purchase_users": max(active_users - licensed_users, 0),
                     "active_users": active_users,
-                    "swap_users": (
-                        max(licensed_users - active_users, 0)
-                        if active_users
-                        else 0
-                    ),
                     "inactive_users": inactive_users,
+                    "usable_users": usable_users,
+                    "additional_licenses_required": (
+                        additional_licenses_required
+                    ),
                     "utilization_percent": utilization_percent,
                     "utilization_bar_percent": min(utilization_percent, 100),
                 }

@@ -78,6 +78,7 @@
         id="menu_employee_access_root"
         name="Employee Access Control"
         action="employee_access_control.action_employee_access_system"
+        web_icon="employee_access_control,static/description/icon.png"
         sequence="80"
         groups="employee_access_control.group_employee_access_user"
     />

@@ -61,9 +61,9 @@
                         t-on-click="() => this.openUsers(system, 'active')"
                     >
                         <i class="fa fa-plus" aria-hidden="true"/>
-                        <strong t-esc="this.formatNumber(system.need_purchase_users)"/>
-                        <span class="eac_metric_label">Need To Purchase Licensed Users</span>
-                        <small>Active users above licensed capacity</small>
+                        <strong t-esc="this.formatNumber(system.additional_licenses_required)"/>
+                        <span class="eac_metric_label">Additional Licenses Required</span>
+                        <small>Active and inactive users above licensed capacity</small>
                     </button>
 
                     <button
@@ -85,9 +85,9 @@
                         t-on-click="() => this.openUsers(system)"
                     >
                         <i class="fa fa-exchange" aria-hidden="true"/>
-                        <strong t-esc="this.formatNumber(system.swap_users)"/>
-                        <span class="eac_metric_label">Swap Available</span>
-                        <small>Available when active users exist</small>
+                        <strong t-esc="this.formatNumber(system.usable_users)"/>
+                        <span class="eac_metric_label">Usable Users</span>
+                        <small>Unallocated licensed capacity</small>
                     </button>
 
                     <button
@@ -99,7 +99,7 @@
                         <i class="fa fa-pause-circle" aria-hidden="true"/>
                         <strong t-esc="this.formatNumber(system.inactive_users)"/>
                         <span class="eac_metric_label">Inactive Users</span>
-                        <small>Available to reactivate</small>
+                        <small>Still counted against licensed capacity</small>
                     </button>
                 </article>
             </section>

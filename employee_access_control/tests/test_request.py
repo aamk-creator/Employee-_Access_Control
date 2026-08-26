@@ -276,20 +276,17 @@ class TestEmployeeAccessRequest(TransactionCase):
             self.assertEqual(row["licensed_users"], system.total_licensed_users)
             self.assertEqual(row["active_users"], expected_active)
             self.assertEqual(row["inactive_users"], expected_inactive)
+            assigned_users = expected_active + expected_inactive
             self.assertEqual(
-                row["need_purchase_users"],
-                max(expected_active - system.total_licensed_users, 0),
+                row["usable_users"],
+                max(system.total_licensed_users - assigned_users, 0),
             )
             self.assertEqual(
-                row["swap_users"],
-                (
-                    max(system.total_licensed_users - expected_active, 0)
-                    if expected_active
-                    else 0
-                ),
+                row["additional_licenses_required"],
+                max(assigned_users - system.total_licensed_users, 0),
             )
 
-    def test_dashboard_swap_is_zero_without_active_users(self):
+    def test_dashboard_counts_inactive_users_against_licenses(self):
         system = self.env["employee.access.system"].search(
             [
                 ("name", "=", "Odoo Light"),
@@ -298,9 +295,30 @@ class TestEmployeeAccessRequest(TransactionCase):
             limit=1,
         )
         self.env["employee.access.request"].search(
-            [("system_id", "=", system.id), ("state", "=", "active")]
+            [
+                ("system_id", "=", system.id),
+                ("state", "in", ["active", "inactive"]),
+            ]
         ).write({"state": "draft"})
         system.total_licensed_users = 100
+        self.env["employee.access.request"].create(
+            {
+                "employee_name": "Dashboard Active User",
+                "employee_email": "dashboard.active@example.com",
+                "company_id": self.env.company.id,
+                "system_id": system.id,
+                "state": "active",
+            }
+        )
+        self.env["employee.access.request"].create(
+            {
+                "employee_name": "Dashboard Inactive User",
+                "employee_email": "dashboard.inactive@example.com",
+                "company_id": self.env.company.id,
+                "system_id": system.id,
+                "state": "inactive",
+            }
+        )
 
         row = next(
             row
@@ -308,8 +326,63 @@ class TestEmployeeAccessRequest(TransactionCase):
             if row["name"] == "Odoo Light"
         )
 
-        self.assertEqual(row["active_users"], 0)
-        self.assertEqual(row["swap_users"], 0)
+        self.assertEqual(row["active_users"], 1)
+        self.assertEqual(row["inactive_users"], 1)
+        self.assertEqual(row["usable_users"], 98)
+        self.assertEqual(row["additional_licenses_required"], 0)
+
+    def test_dashboard_inactive_users_still_use_licenses(self):
+        system = self.env["employee.access.system"].search(
+            [
+                ("name", "=", "Odoo Light"),
+                ("company_id", "=", self.env.company.id),
+            ],
+            limit=1,
+        )
+        request = self.env["employee.access.request"].create(
+            {
+                "employee_name": "Dashboard Swap Test User",
+                "employee_email": "dashboard.swap.test@example.com",
+                "company_id": self.env.company.id,
+                "system_id": system.id,
+                "state": "active",
+            }
+        )
+        licensed_users = system.total_licensed_users
+        row_before = next(
+            row
+            for row in system.get_dashboard_data()
+            if row["name"] == "Odoo Light"
+        )
+        request.action_mark_inactive()
+        row_inactive = next(
+            row
+            for row in system.get_dashboard_data()
+            if row["name"] == "Odoo Light"
+        )
+
+        self.assertEqual(
+            row_inactive["inactive_users"], row_before["inactive_users"] + 1
+        )
+        self.assertEqual(
+            row_inactive["usable_users"], row_before["usable_users"]
+        )
+        self.assertEqual(row_inactive["licensed_users"], licensed_users)
+
+        request.action_reactivate()
+        row_reactivated = next(
+            row
+            for row in system.get_dashboard_data()
+            if row["name"] == "Odoo Light"
+        )
+
+        self.assertEqual(
+            row_reactivated["active_users"], row_before["active_users"]
+        )
+        self.assertEqual(
+            row_reactivated["usable_users"], row_before["usable_users"]
+        )
+        self.assertEqual(row_reactivated["licensed_users"], licensed_users)
 
     def test_dashboard_purchase_count_increases_above_license_capacity(self):
         system = self.env["employee.access.system"].search(
@@ -319,21 +392,24 @@ class TestEmployeeAccessRequest(TransactionCase):
             ],
             limit=1,
         )
-        active_users = self.env["employee.access.request"].search_count(
-            [("system_id", "=", system.id), ("state", "=", "active")]
+        assigned_users = self.env["employee.access.request"].search_count(
+            [
+                ("system_id", "=", system.id),
+                ("state", "in", ["active", "inactive"]),
+            ]
         )
 
-        system.total_licensed_users = active_users
+        system.total_licensed_users = assigned_users
         row_at_capacity = next(
             row
             for row in system.get_dashboard_data()
             if row["name"] == "Odoo Light"
         )
-        self.assertEqual(row_at_capacity["swap_users"], 0)
-        self.assertEqual(row_at_capacity["need_purchase_users"], 0)
+        self.assertEqual(row_at_capacity["usable_users"], 0)
+        self.assertEqual(row_at_capacity["additional_licenses_required"], 0)
 
-        system.total_licensed_users = max(active_users - 1, 0)
-        if not active_users:
+        system.total_licensed_users = max(assigned_users - 1, 0)
+        if not assigned_users:
             self.env["employee.access.request"].create(
                 {
                     "employee_name": "License Capacity Test User",
@@ -348,8 +424,8 @@ class TestEmployeeAccessRequest(TransactionCase):
             for row in system.get_dashboard_data()
             if row["name"] == "Odoo Light"
         )
-        self.assertEqual(row_above_capacity["swap_users"], 0)
-        self.assertEqual(row_above_capacity["need_purchase_users"], 1)
+        self.assertEqual(row_above_capacity["usable_users"], 0)
+        self.assertEqual(row_above_capacity["additional_licenses_required"], 1)
 
     def test_active_company_filters_requests_and_dashboard(self):
         current_company = self.env.company
