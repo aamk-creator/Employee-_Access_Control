@@ -277,7 +277,10 @@ class EmployeeAccessRequest(models.Model):
         string="Mark Done User",
         domain="[('share', '=', False), ('company_ids', 'in', company_id)]",
         tracking=True,
-        help="The only user allowed to finish the request after the vendor email is sent.",
+        help=(
+            "The assigned login user who can finish the request after the vendor "
+            "email is sent. Employee Access and system administrators can also finish it."
+        ),
     )
     state = fields.Selection(
         [
@@ -1595,9 +1598,17 @@ class EmployeeAccessRequest(models.Model):
     def _check_mark_done_user(self):
         self.ensure_one()
         assigned_user = self._get_mark_done_user_for_request()
-        if assigned_user != self.env.user:
+        is_administrator = (
+            self.env.is_superuser()
+            or self.env.user.has_group(
+                "employee_access_control.group_employee_access_administrator"
+            )
+            or self.env.user.has_group("base.group_system")
+        )
+        if assigned_user != self.env.user and not is_administrator:
             raise ValidationError(
-                f"Only {assigned_user.name} can mark this request as done."
+                f"Only {assigned_user.name} or an administrator can mark this "
+                "request as done."
             )
 
     def _subscribe_related_users(self):

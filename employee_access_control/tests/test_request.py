@@ -1126,9 +1126,28 @@ class TestEmployeeAccessRequest(TransactionCase):
         )
         self.assertEqual(len(notification_logs), 2)
 
-        with self.assertRaisesRegex(ValidationError, "Only .* can mark"):
-            request.with_user(self.env.ref("base.user_root")).action_mark_active()
-        request.with_user(request.mark_done_user_id).action_mark_active()
+        unassigned_user = self.env["res.users"].create(
+            {
+                "name": "Unassigned Mark Done User",
+                "login": "unassigned.mark.done@example.com",
+                "email": "unassigned.mark.done@example.com",
+                "company_id": self.env.company.id,
+                "company_ids": [Command.set(self.env.company.ids)],
+                "groups_id": [
+                    Command.link(
+                        self.env.ref(
+                            "employee_access_control.group_employee_access_user"
+                        ).id
+                    )
+                ],
+            }
+        )
+        with self.assertRaisesRegex(
+            ValidationError, "Only .* or an administrator can mark"
+        ):
+            request.with_user(unassigned_user).action_mark_active()
+
+        request.with_user(self.env.ref("base.user_root")).action_mark_active()
         self.assertEqual(request.state, "active")
         self.assertEqual(request.list_status_label, "Done")
         self.assertFalse(
