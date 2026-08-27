@@ -469,22 +469,25 @@ class EmployeeAccessRequest(models.Model):
             )
 
     @api.depends(
+        "employee_id.user_id",
         "employee_name",
         "employee_email",
         "fingerprint_id",
+        "requested_user_id",
         "company_id",
         "system_id",
     )
     def _compute_existing_access_status(self):
         for request in self:
             profile = request._find_existing_active_profile()
-            request.has_existing_active_access = bool(profile)
-            request.duplicate_create_blocked = bool(profile)
-            if not profile:
+            has_existing_access = request._has_existing_active_access(profile)
+            request.has_existing_active_access = has_existing_access
+            request.duplicate_create_blocked = has_existing_access
+            if not has_existing_access:
                 request.existing_access_message = False
-            elif profile.system_id == request.system_id:
+            elif not profile or profile.system_id == request.system_id:
                 request.existing_access_message = (
-                    f"Active access already exists for {profile.system_id.name}. "
+                    f"Active access already exists for {request.system_id.name}. "
                     "Use Update for changes."
                 )
             else:
@@ -964,7 +967,14 @@ class EmployeeAccessRequest(models.Model):
             ("company_id", "=", self.company_id.id),
             ("state", "=", "active"),
         ]
-        if self.fingerprint_id:
+        odoo_user = (
+            self._get_active_odoo_user()
+            if self.system_id.is_odoo_system and self.employee_id
+            else self.env["res.users"]
+        )
+        if odoo_user:
+            domain.append(("last_request_id.requested_user_id", "=", odoo_user.id))
+        elif self.fingerprint_id:
             domain.append(("fingerprint_id", "=", self.fingerprint_id))
         elif self.employee_email:
             domain.append(("employee_email", "=", self.employee_email))
@@ -976,9 +986,31 @@ class EmployeeAccessRequest(models.Model):
         self.ensure_one()
         return [("system_id", "=", self.system_id.id)] if self.system_id else []
 
+    def _get_active_odoo_user(self):
+        """Return the selected employee's active internal Odoo login, if any."""
+        self.ensure_one()
+        user = self.employee_id.user_id or self.requested_user_id
+        if not user or not user.active or user.share:
+            return self.env["res.users"]
+        if self.company_id and self.company_id not in user.company_ids:
+            return self.env["res.users"]
+        return user
+
+    def _has_existing_active_access(self, profile=None):
+        self.ensure_one()
+        if self.system_id.is_odoo_system and self.employee_id:
+            return bool(self._get_active_odoo_user())
+        return bool(profile or self._find_existing_active_profile())
+
     def _find_existing_active_profile(self):
         self.ensure_one()
         if not self.system_id or not self.company_id:
+            return self.env["employee.access.profile"]
+        if (
+            self.system_id.is_odoo_system
+            and self.employee_id
+            and not self._get_active_odoo_user()
+        ):
             return self.env["employee.access.profile"]
         domain = self._matching_profile_domain() + self._existing_profile_system_domain()
         return self.env["employee.access.profile"].search(
@@ -991,8 +1023,11 @@ class EmployeeAccessRequest(models.Model):
         self.ensure_one()
         if not self.company_id:
             return self.env["employee.access.profile"]
+        domain = self._matching_profile_domain()
+        if self.employee_id and not self._get_active_odoo_user():
+            domain.append(("system_id.is_odoo_system", "=", False))
         return self.env["employee.access.profile"].search(
-            self._matching_profile_domain(),
+            domain,
             order="id desc",
             limit=1,
         )
@@ -1041,7 +1076,7 @@ class EmployeeAccessRequest(models.Model):
 
     def _sync_request_type_with_existing_access(self):
         self.ensure_one()
-        if self._find_existing_active_profile():
+        if self._has_existing_active_access():
             self.request_type = "update"
         elif self.request_type != "create":
             self.request_type = "create"
@@ -1084,13 +1119,15 @@ class EmployeeAccessRequest(models.Model):
         for request in self:
             if request.state != "draft":
                 continue
-            target_request_type = "update" if request._find_existing_active_profile() else "create"
+            target_request_type = (
+                "update" if request._has_existing_active_access() else "create"
+            )
             if request.request_type != target_request_type:
                 super(EmployeeAccessRequest, request).write({"request_type": target_request_type})
 
     def _validate_duplicate_create_requests(self):
         for request in self:
-            if request.request_type == "create" and request._find_existing_active_profile():
+            if request.request_type == "create" and request._has_existing_active_access():
                 raise ValidationError(
                     "Active access already exists for this employee. Use Update instead of Create."
                 )

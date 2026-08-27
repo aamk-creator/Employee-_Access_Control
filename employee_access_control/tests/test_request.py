@@ -1326,6 +1326,82 @@ class TestEmployeeAccessRequest(TransactionCase):
         self.assertEqual(request.request_type, "update")
         self.assertTrue(request.duplicate_create_blocked)
 
+    def test_new_employee_without_odoo_user_ignores_stale_matching_profile(self):
+        light_system = self.env["employee.access.system"].search(
+            [("name", "=", "Odoo Light")],
+            limit=1,
+        )
+        self.assertTrue(light_system)
+        self.env["employee.access.profile"].create(
+            {
+                "employee_name": "Former Fingerprint Owner",
+                "fingerprint_id": "100",
+                "employee_email": "former.owner@example.com",
+                "company_id": self.env.company.id,
+                "system_id": light_system.id,
+                "state": "active",
+            }
+        )
+        employee = self.env["hr.employee"].create(
+            {
+                "name": "New Developer",
+                "work_email": "new.developer@example.com",
+                "employee_access_fingerprint_id": "100",
+                "company_id": self.env.company.id,
+            }
+        )
+        request = self.env["employee.access.request"].new(
+            {
+                "employee_id": employee.id,
+                "company_id": self.env.company.id,
+                "system_id": light_system.id,
+            }
+        )
+
+        request._onchange_employee_id()
+
+        self.assertFalse(request.requested_user_id)
+        self.assertFalse(request._has_existing_active_access())
+        self.assertEqual(request.request_type, "create")
+
+    def test_employee_with_active_internal_odoo_user_forces_update(self):
+        light_system = self.env["employee.access.system"].search(
+            [("name", "=", "Odoo Light")],
+            limit=1,
+        )
+        self.assertTrue(light_system)
+        user = self.env["res.users"].create(
+            {
+                "name": "Existing Odoo Developer",
+                "login": "existing.odoo.developer@example.com",
+                "email": "existing.odoo.developer@example.com",
+                "company_id": self.env.company.id,
+                "company_ids": [Command.set(self.env.company.ids)],
+                "groups_id": [Command.link(self.env.ref("base.group_user").id)],
+            }
+        )
+        employee = self.env["hr.employee"].create(
+            {
+                "name": user.name,
+                "work_email": user.email,
+                "user_id": user.id,
+                "company_id": self.env.company.id,
+            }
+        )
+        request = self.env["employee.access.request"].new(
+            {
+                "employee_id": employee.id,
+                "company_id": self.env.company.id,
+                "system_id": light_system.id,
+            }
+        )
+
+        request._onchange_employee_id()
+
+        self.assertEqual(request.requested_user_id, user)
+        self.assertTrue(request._has_existing_active_access())
+        self.assertEqual(request.request_type, "update")
+
     def test_existing_active_access_prefills_profile_and_application_roles(self):
         system = self.env["employee.access.system"].search(
             [("name", "=", "Odoo Standard")],
