@@ -10,7 +10,7 @@
                 <field name="owner_id"/>
                 <field name="facility_ids"/>
                 <field name="tag_ids"/>
-                <field name="recipient_employee_ids"/>
+                <field name="recipient_user_ids"/>
                 <filter name="filter_active" string="Active" domain="[('active', '=', True)]"/>
                 <filter name="filter_archived" string="Archived" domain="[('active', '=', False)]"/>
                 <group>
@@ -56,7 +56,7 @@
                             <field name="total_licensed_users"/>
                             <field name="request_approver_step_id" options="{'no_create': True, 'no_open': True}"/>
                             <field name="handover_approver_step_id" options="{'no_create': True, 'no_open': True}"/>
-                            <field name="recipient_employee_ids" widget="many2many_tags" context="{'search_default_employees': 1}"/>
+                            <field name="recipient_user_ids" widget="many2many_tags" options="{'no_create': True, 'no_create_edit': True}"/>
                         </group>
                     </group>
                     <field name="company_id" invisible="1"/>
@@ -66,6 +66,7 @@
                     <field name="sequence" invisible="1"/>
                     <field name="active" invisible="1"/>
                     <field name="mail_recipient_ids" invisible="1"/>
+                    <field name="recipient_employee_ids" invisible="1"/>
                     <field name="vendor_ticket_email" invisible="1"/>
                     <field name="vendor_portal_url" invisible="1"/>
                 </sheet>

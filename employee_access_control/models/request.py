@@ -1194,6 +1194,18 @@ class EmployeeAccessRequest(models.Model):
 
     def _get_vendor_ticket_partner_ids(self):
         self.ensure_one()
+        user_recipients = self.system_id.recipient_user_ids
+        if user_recipients:
+            users_without_email = user_recipients.filtered(
+                lambda user: not (user.email or "").strip()
+            )
+            if users_without_email:
+                raise ValidationError(
+                    "Selected recipient users do not have email addresses. "
+                    "Add user emails before sending the vendor email."
+                )
+            return user_recipients.mapped("partner_id").ids
+
         employee_recipients = self.system_id.recipient_employee_ids
         if not employee_recipients:
             return self.system_id.mail_recipient_ids.ids
@@ -1226,11 +1238,25 @@ class EmployeeAccessRequest(models.Model):
 
     def _get_vendor_ticket_recipients(self):
         self.ensure_one()
+        users_without_email = self.system_id.recipient_user_ids.filtered(
+            lambda user: not (user.email or "").strip()
+        )
+        if users_without_email:
+            raise ValidationError(
+                "Selected recipient users do not have email addresses. "
+                "Add user emails before sending the vendor email."
+            )
         recipient_emails = [
             email.strip()
-            for email in self.system_id.recipient_employee_ids.mapped("work_email")
+            for email in self.system_id.recipient_user_ids.mapped("email")
             if email and email.strip()
         ]
+        if not recipient_emails:
+            recipient_emails = [
+                email.strip()
+                for email in self.system_id.recipient_employee_ids.mapped("work_email")
+                if email and email.strip()
+            ]
         if not recipient_emails:
             recipient_emails = [
                 email.strip()

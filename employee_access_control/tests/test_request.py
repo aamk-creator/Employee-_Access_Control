@@ -78,7 +78,8 @@ class TestEmployeeAccessRequest(TransactionCase):
         system_view = self.env.ref(
             "employee_access_control.view_employee_access_system_form"
         )
-        self.assertIn("recipient_employee_ids", system_view.arch_db)
+        self.assertIn("recipient_user_ids", system_view.arch_db)
+        self.assertIn('name="recipient_employee_ids" invisible="1"', system_view.arch_db)
         self.assertIn('name="mail_recipient_ids" invisible="1"', system_view.arch_db)
 
     def test_system_approver_configuration_controls_request_workflow(self):
@@ -673,6 +674,10 @@ class TestEmployeeAccessRequest(TransactionCase):
         self.assertEqual(employee_field["string"], "Employee Name")
         self.assertIn('widget="many2one_avatar_employee"', form_view.arch_db)
         self.assertNotIn('<field name="employee_name"', form_view.arch_db)
+        self.assertIn(
+            "not existing_access_message or state != 'draft'",
+            form_view.arch_db,
+        )
 
     def test_employee_source_requires_employee(self):
         system = self.env["employee.access.system"].search([], limit=1)
@@ -975,17 +980,20 @@ class TestEmployeeAccessRequest(TransactionCase):
             [("name", "=", "Odoo Standard")],
             limit=1,
         ) or self.env["employee.access.system"].search([], limit=1)
-        recipient_employee = self.env["hr.employee"].create(
+        recipient_user = self.env["res.users"].create(
             {
-                "name": "Odoo Vendor Employee",
-                "work_email": "odoo.vendor@example.com",
+                "name": "Odoo Vendor User",
+                "login": "odoo.vendor@example.com",
+                "email": "odoo.vendor@example.com",
                 "company_id": self.env.company.id,
+                "company_ids": [Command.set(self.env.company.ids)],
+                "groups_id": [Command.link(self.env.ref("base.group_user").id)],
             }
         )
         system.write(
             {
                 "owner_id": self.env.user.id,
-                "recipient_employee_ids": [Command.set(recipient_employee.ids)],
+                "recipient_user_ids": [Command.set(recipient_user.ids)],
                 "vendor_portal_url": "https://support.vendor.example.com",
             }
         )
@@ -1159,23 +1167,29 @@ class TestEmployeeAccessRequest(TransactionCase):
 
     def test_vendor_ticket_email_uses_multiple_system_recipients(self):
         system = self.env["employee.access.system"].search([], limit=1)
-        recipients = self.env["hr.employee"].create(
+        recipients = self.env["res.users"].create(
             [
                 {
                     "name": "Vendor Support",
-                    "work_email": "support@example.com",
+                    "login": "support@example.com",
+                    "email": "support@example.com",
                     "company_id": self.env.company.id,
+                    "company_ids": [Command.set(self.env.company.ids)],
+                    "groups_id": [Command.link(self.env.ref("base.group_user").id)],
                 },
                 {
                     "name": "System Owner",
-                    "work_email": "owner@example.com",
+                    "login": "owner@example.com",
+                    "email": "owner@example.com",
                     "company_id": self.env.company.id,
+                    "company_ids": [Command.set(self.env.company.ids)],
+                    "groups_id": [Command.link(self.env.ref("base.group_user").id)],
                 },
             ]
         )
         system.write(
             {
-                "recipient_employee_ids": [Command.set(recipients.ids)],
+                "recipient_user_ids": [Command.set(recipients.ids)],
             }
         )
         request = self.env["employee.access.request"].create(
@@ -1201,6 +1215,10 @@ class TestEmployeeAccessRequest(TransactionCase):
             set(ticket.last_vendor_message_id.partner_ids.mapped("email")),
             {"support@example.com", "owner@example.com"},
         )
+        self.assertEqual(
+            ticket.last_vendor_message_id.partner_ids,
+            recipients.mapped("partner_id"),
+        )
 
     def test_vendor_ticket_email_falls_back_to_legacy_partner_recipients(self):
         system = self.env["employee.access.system"].search([], limit=1)
@@ -1213,6 +1231,7 @@ class TestEmployeeAccessRequest(TransactionCase):
         system.write(
             {
                 "mail_recipient_ids": [Command.set(recipients.ids)],
+                "recipient_user_ids": [Command.clear()],
                 "recipient_employee_ids": [Command.clear()],
             }
         )

@@ -84,8 +84,17 @@ class EmployeeAccessSystem(models.Model):
         "employee_access_system_recipient_employee_rel",
         "system_id",
         "employee_id",
+        string="Legacy Employee Recipients",
+        help="Legacy employee recipients kept for existing configurations.",
+    )
+    recipient_user_ids = fields.Many2many(
+        "res.users",
+        "employee_access_system_recipient_user_rel",
+        "system_id",
+        "user_id",
         string="Recipients",
-        help="Employees that receive provisioning emails for this system.",
+        domain="[('share', '=', False), ('company_ids', 'in', company_id)]",
+        help="Odoo users that receive provisioning emails for this system.",
     )
     vendor_ticket_email = fields.Char(
         string="Vendor Site Ticket Email",

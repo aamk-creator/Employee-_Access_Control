@@ -226,9 +226,9 @@
                                    readonly="duplicate_create_blocked"/>
                             <label for="existing_access_message"
                                    string=" "
-                                   invisible="not existing_access_message"/>
+                                   invisible="not existing_access_message or state != 'draft'"/>
                             <div class="text-warning"
-                                 invisible="not existing_access_message">
+                                 invisible="not existing_access_message or state != 'draft'">
                                 <field name="existing_access_message" nolabel="1" readonly="1"/>
                             </div>
                             <field name="access_company_ids"
