@@ -99,7 +99,7 @@
         <field name="model">employee.access.request</field>
         <field name="arch" type="xml">
             <search string="System Overview">
-                <field name="employee_display_name"/>
+                <field name="overview_employee_display_name"/>
                 <field name="employee_id"/>
                 <field name="position"/>
                 <field name="department"/>
@@ -123,12 +123,11 @@
         <field name="model">employee.access.request</field>
         <field name="arch" type="xml">
             <tree string="System Overview" create="0" edit="0" delete="0" import="0">
-                <field name="reference" string="Request ID"/>
-                <field name="employee_display_name" string="Employee"/>
-                <field name="employee_email"/>
-                <field name="fingerprint_id"/>
-                <field name="position" string="Job Position"/>
-                <field name="department"/>
+                <field name="overview_employee_display_name" string="Employee"/>
+                <field name="access_company_ids"
+                       string="Access Companies"
+                       widget="many2many_tags"
+                       options="{'no_create': True, 'no_create_edit': True}"/>
                 <field name="system_id" string="System Type"/>
                 <field name="overview_application_names" string="Application Modules"/>
                 <field name="overview_access_role_names" string="Access Roles"/>

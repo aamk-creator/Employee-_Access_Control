@@ -1,10 +1,11 @@
 {
     "name": "Employee Access Control",
-    "version": "17.0.9.7.0",
+    "version": "17.0.9.13.0",
     "summary": "Configuration foundation for employee access management",
     "author": "aamk",
     "category": "Human Resources",
     "license": "LGPL-3",
+    "images": ["static/description/icon.png"],
     "depends": ["base", "web", "mail", "hr"],
     "data": [
         "data/company_data.xml",
@@ -16,6 +17,7 @@
         "data/request_user_migration_data.xml",
         "views/request_views.xml",
         "views/hr_employee_views.xml",
+        "views/res_users_views.xml",
         "views/facility_views.xml",
         "views/system_tag_views.xml",
         "views/system_views.xml",
@@ -24,6 +26,7 @@
         "views/approval_rule_views.xml",
         "views/provisioning_views.xml",
         "views/employee_access_menus.xml",
+        "data/user_home_action_data.xml",
     ],
     "assets": {
         "web.assets_backend": [
@@ -34,6 +37,9 @@
             "employee_access_control/static/src/js/application_role_dropdowns.js",
             "employee_access_control/static/src/xml/application_role_dropdowns.xml",
             "employee_access_control/static/src/scss/application_role_dropdowns.scss",
+            "employee_access_control/static/src/js/system_overview_matrix.js",
+            "employee_access_control/static/src/xml/system_overview_matrix.xml",
+            "employee_access_control/static/src/scss/system_overview_matrix.scss",
         ],
     },
     "installable": True,

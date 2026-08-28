@@ -58,6 +58,10 @@
                             <field name="system_id"
                                    options="{'no_create': True, 'no_create_edit': True}"/>
                             <field name="default_role"/>
+                            <field name="odoo_group_ids"
+                                   widget="many2many_tags"
+                                   options="{'no_create': True}"
+                                   groups="base.group_system"/>
                             <field name="sequence"/>
                             <field name="company_id"/>
                             <field name="active" invisible="True"/>

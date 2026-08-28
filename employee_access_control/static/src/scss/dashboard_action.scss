@@ -2,8 +2,14 @@
     --eac-dashboard-ink: #14232f;
     --eac-dashboard-muted: #607181;
     --eac-dashboard-border: #d8e1e7;
-    min-height: 100%;
-    overflow: auto;
+    height: 100%;
+    min-height: 0;
+    max-height: 100%;
+    overflow-x: auto;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
+    scroll-behavior: smooth;
     padding: 28px 32px 40px;
     background: #f1f5f7;
     color: var(--eac-dashboard-ink);

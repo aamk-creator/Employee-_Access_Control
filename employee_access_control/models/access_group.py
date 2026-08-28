@@ -190,6 +190,17 @@ class EmployeeAccessGroup(models.Model):
     description = fields.Text()
     sequence = fields.Integer(default=10)
     default_role = fields.Boolean(string="Default Role")
+    odoo_group_ids = fields.Many2many(
+        "res.groups",
+        "employee_access_group_res_groups_rel",
+        "access_group_id",
+        "res_group_id",
+        string="Odoo Security Groups",
+        help=(
+            "Actual Odoo security groups granted when this access role is "
+            "provisioned for an employee."
+        ),
+    )
     display_type = fields.Selection(
         [
             ("privileged_checkbox", "Checkbox (Privileged Access)"),

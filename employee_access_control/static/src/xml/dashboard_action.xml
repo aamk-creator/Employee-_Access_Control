@@ -75,7 +75,7 @@
                         <i class="fa fa-check-circle" aria-hidden="true"/>
                         <strong t-esc="this.formatNumber(system.active_users)"/>
                         <span class="eac_metric_label">Active Users</span>
-                        <small>Vendor completed</small>
+                        <small>Active Odoo internal users</small>
                     </button>
 
                     <button
@@ -86,8 +86,8 @@
                     >
                         <i class="fa fa-exchange" aria-hidden="true"/>
                         <strong t-esc="this.formatNumber(system.swap_users)"/>
-                        <span class="eac_metric_label">Swap Available</span>
-                        <small>Available when active users exist</small>
+                        <span class="eac_metric_label">Usable Users</span>
+                        <small>Unused licensed capacity</small>
                     </button>
 
                     <button
@@ -99,7 +99,7 @@
                         <i class="fa fa-pause-circle" aria-hidden="true"/>
                         <strong t-esc="this.formatNumber(system.inactive_users)"/>
                         <span class="eac_metric_label">Inactive Users</span>
-                        <small>Available to reactivate</small>
+                        <small>Archived Odoo internal users</small>
                     </button>
                 </article>
             </section>

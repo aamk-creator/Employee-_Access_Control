@@ -61,20 +61,16 @@ class EmployeeAccessDashboard extends Component {
         });
     }
 
-    openUsers(system, status = false) {
+    async openUsers(system, status = "active") {
         if (!system.id) {
             return;
         }
-        const additionalContext = {
-            search_default_system_id: system.id,
-        };
-        if (status) {
-            additionalContext[`search_default_overview_${status}`] = 1;
-        }
-        this.action.doAction(
-            "employee_access_control.action_employee_access_system_overview",
-            { additionalContext }
+        const usersAction = await this.orm.call(
+            "employee.access.system",
+            "get_odoo_users_action",
+            [system.id, status]
         );
+        await this.action.doAction(usersAction);
     }
 }
 

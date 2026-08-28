@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_users_form_employee_access" model="ir.ui.view">
+        <field name="name">res.users.form.employee.access</field>
+        <field name="model">res.users</field>
+        <field name="inherit_id" ref="base.view_users_form"/>
+        <field name="arch" type="xml">
+            <field name="company_id" position="after">
+                <field name="employee_access_user_type"
+                       string="Odoo License Type"
+                       invisible="share"/>
+            </field>
+        </field>
+    </record>
+
+    <record id="view_users_tree_employee_access" model="ir.ui.view">
+        <field name="name">res.users.tree.employee.access</field>
+        <field name="model">res.users</field>
+        <field name="inherit_id" ref="base.view_users_tree"/>
+        <field name="arch" type="xml">
+            <field name="company_id" position="after">
+                <field name="employee_access_user_type"
+                       string="License Type"
+                       optional="show"/>
+            </field>
+        </field>
+    </record>
+
+    <record id="view_users_search_employee_access" model="ir.ui.view">
+        <field name="name">res.users.search.employee.access</field>
+        <field name="model">res.users</field>
+        <field name="inherit_id" ref="base.view_users_search"/>
+        <field name="arch" type="xml">
+            <field name="company_ids" position="after">
+                <field name="employee_access_user_type" string="License Type"/>
+            </field>
+            <filter name="filter_no_share" position="after">
+                <filter name="filter_odoo_light"
+                        string="Odoo Light"
+                        domain="[('employee_access_user_type', '=', 'light')]"/>
+                <filter name="filter_odoo_standard"
+                        string="Odoo Standard"
+                        domain="[('employee_access_user_type', '=', 'standard')]"/>
+            </filter>
+        </field>
+    </record>
+</odoo>

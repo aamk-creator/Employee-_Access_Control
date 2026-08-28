@@ -1,0 +1,119 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+    <t t-name="employee_access_control.SystemOverviewMatrix">
+        <div class="o_eac_overview_matrix">
+            <header class="eac_matrix_toolbar o_control_panel">
+                <h2 class="eac_matrix_title">System Overview</h2>
+                <div class="eac_matrix_filters">
+                    <div class="input-group eac_matrix_search">
+                        <span class="input-group-text"><i class="fa fa-search"/></span>
+                        <input type="search"
+                               class="form-control"
+                               placeholder="Search employee, company or system..."
+                               t-model="state.query"
+                               t-on-keydown="onSearchKeydown"/>
+                        <button type="button" class="btn btn-primary" t-on-click="loadMatrix">Search</button>
+                    </div>
+                    <select class="form-select" t-on-change="onSystemChange">
+                        <option value="0" t-att-selected="!state.systemId">All Odoo Systems</option>
+                        <option t-foreach="state.systems"
+                                t-as="system"
+                                t-key="system.id"
+                                t-att-value="system.id"
+                                t-att-selected="state.systemId === system.id"
+                                t-esc="system.name"/>
+                    </select>
+                    <select class="form-select" t-on-change="onStatusChange">
+                        <option value="" t-att-selected="!state.status">All Statuses</option>
+                        <option value="active" t-att-selected="state.status === 'active'">Active</option>
+                        <option value="inactive" t-att-selected="state.status === 'inactive'">Inactive</option>
+                    </select>
+                    <button type="button" class="btn btn-secondary" title="Refresh" t-on-click="loadMatrix">
+                        <i class="fa fa-refresh"/>
+                    </button>
+                </div>
+            </header>
+
+            <div class="eac_matrix_state" t-if="state.loading">
+                <i class="fa fa-spinner fa-spin"/> Loading access overview...
+            </div>
+            <div class="eac_matrix_state eac_matrix_error" t-elif="state.error">
+                System Overview data could not be loaded.
+            </div>
+            <div class="eac_overview_table_area" t-else="">
+                <div class="eac_table_result_count">
+                    <strong t-esc="state.rows.length"/> employee access record(s)
+                </div>
+                <div class="eac_table_scroll">
+                    <table class="o_list_table table table-sm table-hover position-relative mb-0 eac_access_table">
+                        <thead>
+                            <tr>
+                                <th>Employee</th>
+                                <th>Access Companies</th>
+                                <th>System Type</th>
+                                <th>Status</th>
+                                <th t-foreach="state.headers" t-as="header" t-key="header.key">
+                                    <span t-esc="header.name"/>
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr t-foreach="state.rows" t-as="row" t-key="row.id">
+                                <td>
+                                    <button type="button"
+                                            class="btn btn-link eac_employee_link"
+                                            t-on-click="() => this.openRequest(row)">
+                                        <t t-esc="row.employee"/>
+                                    </button>
+                                </td>
+                                <td>
+                                    <div class="eac_access_companies">
+                                        <span t-if="!this.accessCompanies(row).length"
+                                              class="eac_no_access">—</span>
+                                        <t t-else="">
+                                            <span t-foreach="this.visibleAccessCompanies(row)"
+                                                  t-as="company"
+                                                  t-key="company_index"
+                                                  class="eac_access_company_name">
+                                                <t t-esc="company"/><t t-if="!company_last">, </t>
+                                            </span>
+                                            <button t-if="this.hiddenCompanyCount(row)"
+                                                    type="button"
+                                                    class="btn btn-link eac_company_expand_button"
+                                                    t-att-title="state.expandedCompanyRows[row.id] ? 'Show fewer access companies' : 'Show ' + this.hiddenCompanyCount(row) + ' more access companies'"
+                                                    t-att-aria-expanded="state.expandedCompanyRows[row.id] ? 'true' : 'false'"
+                                                    t-on-click.stop="() => this.toggleAccessCompanies(row)">
+                                                <i t-att-class="state.expandedCompanyRows[row.id] ? 'fa fa-minus' : 'fa fa-plus'"/>
+                                            </button>
+                                        </t>
+                                    </div>
+                                </td>
+                                <td>
+                                    <span class="badge rounded-pill eac_system_badge"
+                                        t-att-class="row.system === 'Odoo Light' ? 'eac_system_light' : 'eac_system_standard'"
+                                        t-esc="row.system"/>
+                                </td>
+                                <td>
+                                    <span class="badge rounded-pill eac_status_badge"
+                                        t-att-class="row.status === 'active' ? 'eac_status_active' : 'eac_status_inactive'"
+                                        t-esc="row.status === 'active' ? 'Active' : 'Inactive'"/>
+                                </td>
+                                <td t-foreach="state.headers" t-as="header" t-key="header.key">
+                                    <span t-if="row.roles[header.key]"
+                                        class="eac_role_text"
+                                        t-esc="this.roleFor(row, header)"/>
+                                    <span t-else="" class="eac_no_access">—</span>
+                                </td>
+                            </tr>
+                            <tr t-if="!state.rows.length">
+                                <td class="eac_matrix_empty" t-att-colspan="4 + state.headers.length">
+                                    No active or inactive employee access was found.
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </t>
+</templates>

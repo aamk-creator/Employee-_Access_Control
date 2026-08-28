@@ -1,4 +1,5 @@
 from odoo import Command, api, fields, models
+from odoo.exceptions import AccessError
 
 
 class EmployeeAccessSystem(models.Model):
@@ -248,21 +249,25 @@ class EmployeeAccessSystem(models.Model):
             ]
         )
         systems_by_name = {system.name: system for system in systems}
-        Request = self.env["employee.access.request"]
+        Users = self.env["res.users"].sudo()
         dashboard_rows = []
 
         for system_name in system_names:
             system = systems_by_name.get(system_name)
+            user_domain = [
+                ("share", "=", False),
+                ("login", "not in", ["__system__", "__export__"]),
+                ("company_ids", "in", [self.env.company.id]),
+                ("employee_access_user_type", "=", system.user_type),
+            ] if system else []
             active_users = (
-                Request.search_count(
-                    [("system_id", "=", system.id), ("state", "=", "active")]
-                )
+                Users.search_count(user_domain + [("active", "=", True)])
                 if system
                 else 0
             )
             inactive_users = (
-                Request.search_count(
-                    [("system_id", "=", system.id), ("state", "=", "inactive")]
+                Users.with_context(active_test=False).search_count(
+                    user_domain + [("active", "=", False)]
                 )
                 if system
                 else 0
@@ -275,14 +280,12 @@ class EmployeeAccessSystem(models.Model):
                 {
                     "id": system.id if system else False,
                     "name": system_name,
+                    "company_id": system.company_id.id if system else False,
+                    "user_type": system.user_type if system else False,
                     "licensed_users": licensed_users,
                     "need_purchase_users": max(active_users - licensed_users, 0),
                     "active_users": active_users,
-                    "swap_users": (
-                        max(licensed_users - active_users, 0)
-                        if active_users
-                        else 0
-                    ),
+                    "swap_users": max(licensed_users - active_users, 0),
                     "inactive_users": inactive_users,
                     "utilization_percent": utilization_percent,
                     "utilization_bar_percent": min(utilization_percent, 100),
@@ -290,3 +293,43 @@ class EmployeeAccessSystem(models.Model):
             )
 
         return dashboard_rows
+
+    @api.model
+    def get_odoo_users_action(self, system_id, status="active"):
+        if not self.env.user.has_group("base.group_system"):
+            raise AccessError(
+                "Only an Odoo Settings administrator can manage user accounts."
+            )
+
+        system = self.browse(system_id).exists()
+        if not system or not system.is_odoo_system:
+            raise AccessError("Select a valid Odoo system.")
+        if system.company_id not in self.env.user.company_ids:
+            raise AccessError("You cannot manage users for this company.")
+
+        domain = [
+            ("share", "=", False),
+            ("login", "not in", ["__system__", "__export__"]),
+            ("company_ids", "in", [system.company_id.id]),
+            ("employee_access_user_type", "=", system.user_type),
+        ]
+        context = {
+            "search_default_filter_no_share": 1,
+            "show_user_group_warning": True,
+        }
+        if status == "inactive":
+            domain.append(("active", "=", False))
+            context.update({"active_test": False, "search_default_Inactive": 1})
+        else:
+            domain.append(("active", "=", True))
+
+        action = self.env["ir.actions.actions"]._for_xml_id("base.action_res_users")
+        action.update(
+            {
+                "name": f"{system.name} {'Inactive' if status == 'inactive' else 'Active'} Users",
+                "domain": domain,
+                "context": context,
+                "target": "current",
+            }
+        )
+        return action

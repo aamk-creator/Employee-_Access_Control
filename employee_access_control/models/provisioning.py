@@ -311,6 +311,7 @@ class EmployeeAccessProvisionTask(models.Model):
 
     def action_mark_done(self):
         now = fields.Datetime.now()
+        action = False
         for task in self:
             if task.state != "in_progress":
                 raise ValidationError(
@@ -321,6 +322,7 @@ class EmployeeAccessProvisionTask(models.Model):
                     "Send the vendor email before marking the request as done."
                 )
             task.request_id._check_mark_done_user()
+            odoo_user = task.request_id._sync_odoo_user_account()
             task.write(
                 {
                     "state": "done",
@@ -341,10 +343,17 @@ class EmployeeAccessProvisionTask(models.Model):
             task.request_id.write({"state": "active"})
             task.request_id._log_event(
                 "provisioned",
-                "Vendor ticket finished. Access profile activated and request completed.",
+                (
+                    f"Vendor ticket finished. Odoo user {odoo_user.login} was "
+                    "created or updated and the request was completed."
+                    if odoo_user
+                    else "Vendor ticket finished. Access profile activated and request completed."
+                ),
                 profile=task.profile_id,
                 task=task,
             )
+            action = task.request_id._odoo_user_form_action(odoo_user)
+        return action
 
     def action_mark_user_inactive(self):
         for task in self:

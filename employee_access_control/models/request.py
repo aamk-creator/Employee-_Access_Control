@@ -35,31 +35,57 @@ class EmployeeAccessRequest(models.Model):
 
     @api.model
     def _application_line_commands(self, system, profile=None):
+        same_system_profile = bool(profile and profile.system_id == system)
         existing_application_ids = set(profile.application_ids.ids) if profile else set()
+        existing_application_names = (
+            {
+                (application.name or "").strip().casefold()
+                for application in profile.application_ids
+            }
+            if profile
+            else set()
+        )
         previous_lines_by_application = {}
-        if profile and profile.last_request_id.system_id == system:
+        if profile and profile.last_request_id:
             previous_lines_by_application = {
-                line.application_id.id: line
+                (
+                    line.application_id.id
+                    if same_system_profile
+                    else (line.application_id.name or "").strip().casefold()
+                ): line
                 for line in profile.last_request_id.application_line_ids
                 if not line.remove_access
             }
 
-        return [
-            Command.create(
-                {
-                    "application_id": application.id,
-                    "access_group_id": self._existing_or_default_access_group(
-                        application,
-                        previous_lines_by_application.get(application.id),
-                        use_default=not profile or application.id in existing_application_ids,
-                    ).id,
-                    "remove_access": bool(
-                        profile and application.id not in existing_application_ids
-                    ),
-                }
+        commands = []
+        for application in self._applications_for_system(system):
+            application_name = (application.name or "").strip().casefold()
+            has_existing_application = bool(
+                profile
+                and (
+                    application.id in existing_application_ids
+                    if same_system_profile
+                    else application_name in existing_application_names
+                )
             )
-            for application in self._applications_for_system(system)
-        ]
+            previous_line = previous_lines_by_application.get(
+                application.id if same_system_profile else application_name
+            )
+            access_group = self._existing_or_default_access_group(
+                application,
+                previous_line,
+                use_default=not profile or has_existing_application,
+            )
+            commands.append(
+                Command.create(
+                    {
+                        "application_id": application.id,
+                        "access_group_id": access_group.id,
+                        "remove_access": bool(profile and not has_existing_application),
+                    }
+                )
+            )
+        return commands
 
     @api.model
     def _existing_or_default_access_group(
@@ -77,6 +103,19 @@ class EmployeeAccessRequest(models.Model):
             and previous_group.display_type == "application_role"
         ):
             return previous_group
+        if previous_group and previous_group.display_type == "application_role":
+            matching_group = self.env["employee.access.group"].search(
+                [
+                    ("application_id", "=", application.id),
+                    ("name", "=ilike", previous_group.name),
+                    ("display_type", "=", "application_role"),
+                    ("active", "=", True),
+                ],
+                order="sequence, id",
+                limit=1,
+            )
+            if matching_group:
+                return matching_group
         return self._default_access_group(application) if use_default else previous_group
 
     @api.model
@@ -96,6 +135,89 @@ class EmployeeAccessRequest(models.Model):
     @api.model
     def _default_application_line_ids(self):
         return self._application_line_commands(self._default_system_id())
+
+    @api.model
+    def get_system_overview_matrix(self, options=None):
+        """Return the read-only, dynamic application/role matrix for the overview."""
+        options = options or {}
+        system_id = int(options.get("system_id") or 0)
+        status = options.get("status")
+        query = (options.get("query") or "").strip()
+
+        systems = self.env["employee.access.system"].search(
+            [
+                ("company_id", "=", self.env.company.id),
+                ("name", "in", ["Odoo Light", "Odoo Standard"]),
+                ("active", "=", True),
+            ],
+            order="sequence, name, id",
+        )
+        if system_id not in systems.ids:
+            system_id = 0
+
+        selected_systems = systems.filtered(lambda item: item.id == system_id) or systems
+        applications = self.env["employee.access.application"].search(
+            [
+                ("company_id", "=", self.env.company.id),
+                ("system_id", "in", selected_systems.ids),
+                ("active", "=", True),
+            ],
+            order="sequence, name, id",
+        )
+
+        # Light and Standard commonly contain applications with the same name. They
+        # share one visual column; each row still gets the role from its own system.
+        headers = []
+        header_names = set()
+        for application in applications:
+            key = (application.name or "").strip().casefold()
+            if key and key not in header_names:
+                header_names.add(key)
+                headers.append({"key": key, "name": application.name})
+
+        domain = [
+            ("state", "in", ["active", "inactive"]),
+            ("system_id", "in", selected_systems.ids),
+        ]
+        if status in ("active", "inactive"):
+            domain.append(("state", "=", status))
+        if query:
+            domain += [
+                "|",
+                "|",
+                ("overview_employee_display_name", "ilike", query),
+                ("access_company_ids.name", "ilike", query),
+                ("system_id.name", "ilike", query),
+            ]
+
+        requests = self.search(domain, order="overview_employee_display_name, system_id, id")
+        rows = []
+        for request in requests:
+            roles = {}
+            included_lines = request.application_line_ids.filtered(
+                lambda line: not line.remove_access
+            ).sorted(lambda line: (line.sequence, line.application_id.name or "", line.id))
+            for line in included_lines:
+                key = (line.application_id.name or "").strip().casefold()
+                if key:
+                    roles[key] = line.access_group_id.name or "Not Assigned"
+            rows.append(
+                {
+                    "id": request.id,
+                    "employee": request.overview_employee_display_name,
+                    "access_companies": ", ".join(request.access_company_ids.mapped("name")),
+                    "access_company_names": request.access_company_ids.mapped("name"),
+                    "system": request.system_id.name,
+                    "status": request.access_status,
+                    "roles": roles,
+                }
+            )
+
+        return {
+            "systems": [{"id": system.id, "name": system.name} for system in systems],
+            "headers": headers,
+            "rows": rows,
+        }
 
     @api.model
     def _normalize_application_line_commands(self, commands, system):
@@ -177,6 +299,12 @@ class EmployeeAccessRequest(models.Model):
     employee_display_name = fields.Char(
         string="Employee Display Name",
         compute="_compute_employee_display_name",
+        store=True,
+        index=True,
+    )
+    overview_employee_display_name = fields.Char(
+        string="Employee",
+        compute="_compute_overview_employee_display_name",
         store=True,
         index=True,
     )
@@ -485,15 +613,10 @@ class EmployeeAccessRequest(models.Model):
             request.duplicate_create_blocked = has_existing_access
             if not has_existing_access:
                 request.existing_access_message = False
-            elif not profile or profile.system_id == request.system_id:
+            else:
                 request.existing_access_message = (
                     f"Active access already exists for {request.system_id.name}. "
                     "Use Update for changes."
-                )
-            else:
-                request.existing_access_message = (
-                    f"Active access already exists for {profile.system_id.name}. "
-                    f"Use Update to move to {request.system_id.name}."
                 )
             if request.duplicate_create_blocked:
                 request.request_type = "update"
@@ -507,6 +630,26 @@ class EmployeeAccessRequest(models.Model):
     def _compute_employee_display_name(self):
         for request in self:
             request.employee_display_name = request.employee_id.name or request.employee_name
+
+    @api.depends(
+        "employee_id.name",
+        "employee_id.company_id.name",
+        "employee_name",
+        "company_id.name",
+    )
+    def _compute_overview_employee_display_name(self):
+        for request in self:
+            employee_name = request.employee_id.name or request.employee_name or ""
+            company_name = (
+                request.employee_id.company_id.name
+                if request.employee_id and request.employee_id.company_id
+                else request.company_id.name
+            )
+            request.overview_employee_display_name = (
+                f"{employee_name} ({company_name})"
+                if employee_name and company_name
+                else employee_name
+            )
 
     @api.depends("state", "request_date", "provisioning_task_ids.completed_on")
     def _compute_system_overview_fields(self):
@@ -744,6 +887,27 @@ class EmployeeAccessRequest(models.Model):
             )
         return True
 
+    @api.model
+    def _backfill_completed_odoo_user_accounts(self):
+        """Create native users for completed tickets from releases before user sync."""
+        requests = self.sudo().with_context(active_test=False).search(
+            [
+                ("state", "in", ["active", "inactive"]),
+                ("system_id.is_odoo_system", "=", True),
+                "|",
+                ("requested_user_id", "=", False),
+                ("employee_id.user_id", "=", False),
+            ],
+            order="id",
+        )
+        for request in requests:
+            request._sync_odoo_user_account()
+            if request.state == "inactive":
+                if request.profile_id and request.profile_id.state != "revoked":
+                    request.profile_id.write({"state": "revoked"})
+                request._archive_odoo_user_if_unused()
+        return True
+
     def action_submit(self):
         self._normalize_request_type_from_existing_access()
         self._validate_no_pending_duplicate_requests()
@@ -894,6 +1058,7 @@ class EmployeeAccessRequest(models.Model):
             return action
 
     def action_mark_active(self):
+        action = False
         for request in self:
             if request.state != "provisioning":
                 raise ValidationError(
@@ -905,7 +1070,8 @@ class EmployeeAccessRequest(models.Model):
             if not task:
                 raise ValidationError("No vendor ticket is currently in progress.")
             request._check_mark_done_user()
-            task.action_mark_done()
+            action = task.action_mark_done()
+        return action
 
     def action_mark_inactive(self):
         for request in self:
@@ -915,6 +1081,7 @@ class EmployeeAccessRequest(models.Model):
             if request.profile_id:
                 request.profile_id.write({"state": "revoked"})
             request.write({"state": "inactive", "inactive_date": inactive_date})
+            request._archive_odoo_user_if_unused()
             request._log_event(
                 "deactivated",
                 "Vendor confirmed that the user account is inactive.",
@@ -928,6 +1095,7 @@ class EmployeeAccessRequest(models.Model):
             if request.profile_id:
                 request.profile_id.write({"state": "active"})
             request.write({"state": "active", "inactive_date": False})
+            request._reactivate_odoo_user()
             request._log_event(
                 "reactivated",
                 "Vendor confirmed that the user account is active again.",
@@ -973,7 +1141,28 @@ class EmployeeAccessRequest(models.Model):
             else self.env["res.users"]
         )
         if odoo_user:
-            domain.append(("last_request_id.requested_user_id", "=", odoo_user.id))
+            domain.extend(
+                [
+                    "|",
+                    ("last_request_id.employee_id", "=", self.employee_id.id),
+                    ("last_request_id.requested_user_id", "=", odoo_user.id),
+                ]
+            )
+        elif self.system_id.is_odoo_system and self.employee_id:
+            # A provisioned Odoo account can predate the explicit hr.employee ->
+            # res.users link. The completed request is still a safe identity link;
+            # unlike fingerprint matching it cannot belong to a reused value. Exact
+            # email matching keeps active profiles created by older releases usable.
+            if self.employee_email:
+                domain.extend(
+                    [
+                        "|",
+                        ("last_request_id.employee_id", "=", self.employee_id.id),
+                        ("employee_email", "=ilike", self.employee_email),
+                    ]
+                )
+            else:
+                domain.append(("last_request_id.employee_id", "=", self.employee_id.id))
         elif self.fingerprint_id:
             domain.append(("fingerprint_id", "=", self.fingerprint_id))
         elif self.employee_email:
@@ -998,34 +1187,37 @@ class EmployeeAccessRequest(models.Model):
 
     def _has_existing_active_access(self, profile=None):
         self.ensure_one()
-        if self.system_id.is_odoo_system and self.employee_id:
-            return bool(self._get_active_odoo_user())
+        if (
+            self.system_id.is_odoo_system
+            and self.employee_id
+            and self._get_active_odoo_user()
+        ):
+            return True
         return bool(profile or self._find_existing_active_profile())
 
     def _find_existing_active_profile(self):
         self.ensure_one()
         if not self.system_id or not self.company_id:
             return self.env["employee.access.profile"]
-        if (
-            self.system_id.is_odoo_system
-            and self.employee_id
-            and not self._get_active_odoo_user()
-        ):
-            return self.env["employee.access.profile"]
-        domain = self._matching_profile_domain() + self._existing_profile_system_domain()
-        return self.env["employee.access.profile"].search(
-            domain,
+        matching_domain = self._matching_profile_domain()
+        profile = self.env["employee.access.profile"].search(
+            matching_domain + self._existing_profile_system_domain(),
             order="id desc",
             limit=1,
         )
+        if not profile and self.system_id.is_odoo_system:
+            profile = self.env["employee.access.profile"].search(
+                matching_domain + [("system_id.is_odoo_system", "=", True)],
+                order="id desc",
+                limit=1,
+            )
+        return profile
 
     def _find_existing_active_profile_any_system(self):
         self.ensure_one()
         if not self.company_id:
             return self.env["employee.access.profile"]
         domain = self._matching_profile_domain()
-        if self.employee_id and not self._get_active_odoo_user():
-            domain.append(("system_id.is_odoo_system", "=", False))
         return self.env["employee.access.profile"].search(
             domain,
             order="id desc",
@@ -1241,6 +1433,7 @@ class EmployeeAccessRequest(models.Model):
         users_without_email = self.system_id.recipient_user_ids.filtered(
             lambda user: not (user.email or "").strip()
         )
+
         if users_without_email:
             raise ValidationError(
                 "Selected recipient users do not have email addresses. "
@@ -1270,6 +1463,116 @@ class EmployeeAccessRequest(models.Model):
                 f"{self.system_id.name}. Open Configuration > Systems and add recipients first."
             )
         return ", ".join(recipient_emails)
+
+    def _sync_odoo_user_account(self):
+        """Create or update the real internal Odoo login for an Odoo request."""
+        self.ensure_one()
+        if not self.system_id.is_odoo_system:
+            return self.env["res.users"]
+
+        Users = self.env["res.users"].sudo().with_context(active_test=False)
+        user = self.employee_id.user_id or self.requested_user_id
+        if not user:
+            user = Users._employee_access_get_or_create(
+                name=self.employee_name,
+                fingerprint=self.fingerprint_id,
+                email=self.employee_email,
+                department=self.department,
+                position=self.position,
+                company=self.company_id,
+                employee=self.employee_id,
+            )
+
+        allowed_companies = self.access_company_ids | self.company_id
+        selected_roles = self.application_line_ids.filtered(
+            lambda line: not line.remove_access and line.access_group_id
+        ).mapped("access_group_id")
+        application_groups = self.env["employee.access.group"].sudo().search(
+            [("application_id", "in", self.application_line_ids.application_id.ids)]
+        )
+        managed_odoo_groups = application_groups.mapped("odoo_group_ids")
+        requested_odoo_groups = selected_roles.mapped("odoo_group_ids")
+        internal_group = self.env.ref("base.group_user")
+        groups_to_remove = managed_odoo_groups - requested_odoo_groups
+        groups_to_add = requested_odoo_groups | internal_group
+
+        values = {
+            "name": self.employee_name,
+            "email": self.employee_email or False,
+            "employee_access_fingerprint_id": self.fingerprint_id or False,
+            "employee_access_department": self.department or False,
+            "employee_access_position": self.position or False,
+            "employee_access_user_type": self.system_id.user_type,
+            "active": True,
+            "company_ids": [Command.link(company.id) for company in allowed_companies],
+            "groups_id": [
+                *[Command.unlink(group.id) for group in groups_to_remove],
+                *[Command.link(group.id) for group in groups_to_add],
+            ],
+        }
+        if user.company_id not in allowed_companies:
+            values["company_id"] = self.company_id.id
+        user.with_context(
+            no_reset_password=True,
+            employee_access_skip_status_sync=True,
+        ).write(values)
+
+        if self.employee_id and self.employee_id.user_id != user:
+            self.employee_id.sudo().write({"user_id": user.id})
+        if self.requested_user_id != user:
+            self.sudo().write({"requested_user_id": user.id})
+        return user
+
+    def _archive_odoo_user_if_unused(self):
+        for request in self.filtered("system_id.is_odoo_system"):
+            user = request.employee_id.user_id or request.requested_user_id
+            if not user or user == self.env.user:
+                continue
+            other_active_access = self.sudo().search_count(
+                [
+                    ("id", "!=", request.id),
+                    ("state", "=", "active"),
+                    ("system_id.is_odoo_system", "=", True),
+                    "|",
+                    ("requested_user_id", "=", user.id),
+                    ("employee_id", "=", request.employee_id.id),
+                ]
+            )
+            if not other_active_access:
+                user.sudo().with_context(
+                    employee_access_skip_status_sync=True
+                ).active = False
+
+    def _reactivate_odoo_user(self):
+        for request in self.filtered("system_id.is_odoo_system"):
+            user = request.employee_id.user_id or request.requested_user_id
+            if user:
+                user.sudo().with_context(
+                    active_test=False,
+                    employee_access_skip_status_sync=True,
+                ).write(
+                    {
+                        "active": True,
+                        "employee_access_user_type": request.system_id.user_type,
+                    }
+                )
+
+    def _odoo_user_form_action(self, user):
+        self.ensure_one()
+        if not user:
+            return False
+        action = self.env["ir.actions.actions"]._for_xml_id("base.action_res_users")
+        action.update(
+            {
+                "name": user.name,
+                "res_id": user.id,
+                "views": [(self.env.ref("base.view_users_form").id, "form")],
+                "view_mode": "form",
+                "domain": [],
+                "target": "current",
+            }
+        )
+        return action
 
     def _get_vendor_ticket_email(self):
         self.ensure_one()
